@@ -20,7 +20,7 @@ import qualified Text.Parser.Combinators as Parser
 import qualified Data.Attoparsec.ByteString as Attoparsec
 import qualified Text.ParserCombinators.Incremental as Incremental
 import Text.ParserCombinators.Incremental.Symmetric (Symmetric)
-import Data.Serialize (Serialize, bytesRead, get, put, runGet, runPut)
+import Data.Serialize (Serialize, Result(Done, Fail, Partial), get, put, runGetPartial, runPut)
 
 import qualified Rank2
 import qualified Rank2.TH
@@ -40,9 +40,9 @@ $(Rank2.TH.deriveAll ''BitMap)
 format :: Format (Incremental.Parser Symmetric ByteString) Identity ByteString (BitMap Identity)
 format = literal (ASCII.pack "BMP") *> mfix (\r-> record
   BitMap{
-        width= byte,
-        height= byte,
-        pixels= count (fromIntegral $ height r) (count (fromIntegral $ width r) byte)
+        width= cereal,
+        height= cereal,
+        pixels= count (fromIntegral $ height r) (count (fromIntegral $ width r) cereal)
         })
 
 data Format m n s a = Format {
@@ -73,10 +73,10 @@ byte = Format{
    serialize = Identity . ByteString.singleton}
 
 cereal = Format p (Identity . runPut . put)
-   where p = do i <- getInput
-                case runGet ((,) <$> get <*> bytesRead) i
-                   of Left err -> fail err
-                      Right (a, len) -> Parser.count len anyToken Applicative.*> pure a
+   where p = go (runGetPartial get mempty)
+            where go (Fail msg _) = fail msg
+                  go (Done r _) = pure r
+                  go (Partial cont) = anyToken >>= go . cont
 
 count n item = Format{
    parse = Parser.count (fromIntegral n) (parse item),
