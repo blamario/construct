@@ -20,7 +20,8 @@ import qualified Text.Parser.Combinators as Parser
 import qualified Data.Attoparsec.ByteString as Attoparsec
 import qualified Text.ParserCombinators.Incremental as Incremental
 import Text.ParserCombinators.Incremental.Symmetric (Symmetric)
-import Data.Serialize (Serialize, Result(Done, Fail, Partial), get, put, runGetPartial, runPut)
+import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
+import qualified Data.Serialize as Serialize
 
 import qualified Rank2
 import qualified Rank2.TH
@@ -50,14 +51,16 @@ data Format m n s a = Format {
    serialize :: a -> n s
    }
 
+(<$)    :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 (*>)    :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
-(<*)    :: Applicative m => Format m n s a -> Format m n s () -> Format m n s a
+(<*)    :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
 (<|>)   :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
 empty   :: (Alternative m, Alternative n) => Format m n s a
 mfix    :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
 byte    :: (InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString Word8
 cereal  :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString a
+cereal' :: (Monad m, InputParsing m, ParserInput m ~ ByteString) => Get a -> Putter a -> Format m Identity ByteString a
 count   :: (Applicative m, Monoid (n s)) => Word -> Format m n s a -> Format m n s [a]
 --record  :: (Rank2.Apply g, Rank2.Traversable g, Applicative m, Monoid (n s)) => g (Format m n s) -> Format m n s (g Identity)
 record  :: (Rank2.Apply g, Rank2.Traversable g, Monoid s, Monoid (n s)) =>
@@ -72,7 +75,9 @@ byte = Format{
    parse = ByteString.head <$> anyToken,
    serialize = Identity . ByteString.singleton}
 
-cereal = Format p (Identity . runPut . put)
+cereal = cereal' Serialize.get Serialize.put
+
+cereal' get put = Format p (Identity . runPut . put)
    where p = go (runGetPartial get mempty)
             where go (Fail msg _) = fail msg
                   go (Done r _) = pure r
@@ -89,13 +94,17 @@ record formats = Format{
    }
    where serializeField format (Identity a) = Functor.Const (serialize format a)
 
+a <$ f = Format{
+   parse = a Applicative.<$ parse f,
+   serialize = \b-> if a == b then serialize f () else Applicative.empty}
+
 f1 *> f2 = Format{
    parse = parse f1 Applicative.*> parse f2,
    serialize = \a-> serialize f1 () <> serialize f2 a}
 
 f1 <* f2 = Format{
    parse = parse f1 Applicative.<* parse f2,
-   serialize = serialize f1}
+   serialize = \a-> serialize f1 a <> serialize f2 ()}
 
 f1 <|> f2 = Format{
    parse = parse f1 Applicative.<|> parse f2,
