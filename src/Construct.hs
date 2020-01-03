@@ -16,7 +16,7 @@ import qualified Data.ByteString.Char8 as ASCII
 import Data.Monoid.Factorial (FactorialMonoid)
 import Data.Monoid.Cancellative (LeftReductiveMonoid)
 import Text.Grampa (InputParsing(ParserInput, anyToken, getInput, string))
-import Text.Parser.Combinators (count)
+import qualified Text.Parser.Combinators as Parser
 import qualified Data.Attoparsec.ByteString as Attoparsec
 import qualified Text.ParserCombinators.Incremental as Incremental
 import Text.ParserCombinators.Incremental.Symmetric (Symmetric)
@@ -42,7 +42,7 @@ format = literal (ASCII.pack "BMP") *> mfix (\r-> record
   BitMap{
         width= byte,
         height= byte,
-        pixels= matrix (fromIntegral $ width r) (fromIntegral $ height r) byte
+        pixels= count (fromIntegral $ height r) (count (fromIntegral $ width r) byte)
         })
 
 data Format m n s a = Format {
@@ -58,7 +58,7 @@ mfix    :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
 byte    :: (InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString Word8
 cereal  :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString a
-matrix  :: (Applicative m, Monoid (n s)) => Word -> Word -> Format m n s a -> Format m n s [[a]]
+count   :: (Applicative m, Monoid (n s)) => Word -> Format m n s a -> Format m n s [a]
 --record  :: (Rank2.Apply g, Rank2.Traversable g, Applicative m, Monoid (n s)) => g (Format m n s) -> Format m n s (g Identity)
 record  :: (Rank2.Apply g, Rank2.Traversable g, Monoid s, Monoid (n s)) =>
            g (Format (Incremental.Parser Symmetric s) n s) -> Format (Incremental.Parser Symmetric s) n s (g Identity)
@@ -76,11 +76,11 @@ cereal = Format p (Identity . runPut . put)
    where p = do i <- getInput
                 case runGet ((,) <$> get <*> bytesRead) i
                    of Left err -> fail err
-                      Right (a, len) -> count len anyToken Applicative.*> pure a
+                      Right (a, len) -> Parser.count len anyToken Applicative.*> pure a
 
-matrix width height item = Format{
-   parse = count (fromIntegral height) (count (fromIntegral width) $ parse item),
-   serialize = foldMap (foldMap $ serialize item)}
+count n item = Format{
+   parse = Parser.count (fromIntegral n) (parse item),
+   serialize = foldMap (serialize item)}
 
 record formats = Format{
 --   parse = Rank2.traverse (fmap Identity . parse) formats,
