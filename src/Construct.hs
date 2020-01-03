@@ -19,7 +19,7 @@ import Text.Grampa (InputParsing(ParserInput, anyToken, getInput, string))
 import qualified Text.Parser.Combinators as Parser
 import qualified Data.Attoparsec.ByteString as Attoparsec
 import qualified Text.ParserCombinators.Incremental as Incremental
-import Text.ParserCombinators.Incremental.Symmetric (Symmetric)
+import Text.ParserCombinators.Incremental.LeftBiasedLocal (LeftBiasedLocal, Parser)
 import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
 import qualified Data.Serialize as Serialize
 
@@ -38,7 +38,7 @@ deriving instance Show (BitMap Identity)
 
 $(Rank2.TH.deriveAll ''BitMap)
 
-format :: Format (Incremental.Parser Symmetric ByteString) Identity ByteString (BitMap Identity)
+format :: Format (Parser ByteString) Identity ByteString (BitMap Identity)
 format = literal (ASCII.pack "BMP") *> mfix (\r-> record
   BitMap{
         width= cereal,
@@ -51,6 +51,13 @@ data Format m n s a = Format {
    serialize :: a -> n s
    }
 
+class MonadFix m => FixTraversable m where
+   fixSequence :: Rank2.Traversable g => g m -> m (g Identity)
+   fixSequence = Rank2.traverse (Identity <$>)
+
+instance Monoid s => FixTraversable (Incremental.Parser t s) where
+   fixSequence = Incremental.record
+
 (<$)    :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 (*>)    :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
 (<*)    :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
@@ -62,9 +69,8 @@ byte    :: (InputParsing m, ParserInput m ~ ByteString) => Format m Identity Byt
 cereal  :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString a
 cereal' :: (Monad m, InputParsing m, ParserInput m ~ ByteString) => Get a -> Putter a -> Format m Identity ByteString a
 count   :: (Applicative m, Monoid (n s)) => Word -> Format m n s a -> Format m n s [a]
---record  :: (Rank2.Apply g, Rank2.Traversable g, Applicative m, Monoid (n s)) => g (Format m n s) -> Format m n s (g Identity)
-record  :: (Rank2.Apply g, Rank2.Traversable g, Monoid s, Monoid (n s)) =>
-           g (Format (Incremental.Parser Symmetric s) n s) -> Format (Incremental.Parser Symmetric s) n s (g Identity)
+record  :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s)) =>
+           g (Format m n s) -> Format m n s (g Identity)
 
 literal s = Format{
    parse = void (string s),
@@ -88,8 +94,7 @@ count n item = Format{
    serialize = foldMap (serialize item)}
 
 record formats = Format{
---   parse = Rank2.traverse (fmap Identity . parse) formats,
-   parse = Incremental.record (parse Rank2.<$> formats),
+   parse = fixSequence (parse Rank2.<$> formats),
    serialize = Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
    }
    where serializeField format (Identity a) = Functor.Const (serialize format a)
