@@ -38,12 +38,12 @@ deriving instance Show (BitMap Identity)
 $(Rank2.TH.deriveAll ''BitMap)
 
 format :: Format (Incremental.Parser Symmetric ByteString) Identity ByteString (BitMap Identity)
-format = literal (ASCII.pack "BMP") *> record
+format = literal (ASCII.pack "BMP") *> mfix (\r-> record
   BitMap{
-        width= cereal @Word8,
-        height= cereal @Word8,
-        pixels= matrix 2 3 cereal
-        }
+        width= byte,
+        height= byte,
+        pixels= matrix (fromIntegral $ width r) (fromIntegral $ height r) byte
+        })
 
 data Format m n s a = Format {
    parse :: m a,
@@ -59,7 +59,9 @@ literal :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s ->
 byte    :: (InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString Word8
 cereal  :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString a
 matrix  :: (Applicative m, Monoid (n s)) => Word -> Word -> Format m n s a -> Format m n s [[a]]
-record  :: (Rank2.Apply g, Rank2.Traversable g, Applicative m, Monoid (n s)) => g (Format m n s) -> Format m n s (g Identity)
+--record  :: (Rank2.Apply g, Rank2.Traversable g, Applicative m, Monoid (n s)) => g (Format m n s) -> Format m n s (g Identity)
+record  :: (Rank2.Apply g, Rank2.Traversable g, Monoid s, Monoid (n s)) =>
+           g (Format (Incremental.Parser Symmetric s) n s) -> Format (Incremental.Parser Symmetric s) n s (g Identity)
 
 literal s = Format{
    parse = void (string s),
@@ -81,7 +83,8 @@ matrix width height item = Format{
    serialize = foldMap (foldMap $ serialize item)}
 
 record formats = Format{
-   parse = Rank2.traverse (fmap Identity . parse) formats,
+--   parse = Rank2.traverse (fmap Identity . parse) formats,
+   parse = Incremental.record (parse Rank2.<$> formats),
    serialize = Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
    }
    where serializeField format (Identity a) = Functor.Const (serialize format a)
