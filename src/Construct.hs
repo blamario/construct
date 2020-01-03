@@ -58,19 +58,21 @@ class MonadFix m => FixTraversable m where
 instance Monoid s => FixTraversable (Incremental.Parser t s) where
    fixSequence = Incremental.record
 
-(<$)    :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
-(*>)    :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
-(<*)    :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
-(<|>)   :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
-empty   :: (Alternative m, Alternative n) => Format m n s a
-mfix    :: MonadFix m => (a -> Format m n s a) -> Format m n s a
-literal :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
-byte    :: (InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString Word8
-cereal  :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString a
-cereal' :: (Monad m, InputParsing m, ParserInput m ~ ByteString) => Get a -> Putter a -> Format m Identity ByteString a
-count   :: (Applicative m, Monoid (n s)) => Word -> Format m n s a -> Format m n s [a]
-record  :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s)) =>
-           g (Format m n s) -> Format m n s (g Identity)
+(<$)     :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
+(*>)     :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
+(<*)     :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
+(<|>)    :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
+optional :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s (Maybe a)
+many     :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s [a]
+empty    :: (Alternative m, Alternative n) => Format m n s a
+mfix     :: MonadFix m => (a -> Format m n s a) -> Format m n s a
+literal  :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
+byte     :: (InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString Word8
+cereal   :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString) => Format m Identity ByteString a
+cereal'  :: (Monad m, InputParsing m, ParserInput m ~ ByteString) => Get a -> Putter a -> Format m Identity ByteString a
+count    :: (Applicative m, Monoid (n s)) => Word -> Format m n s a -> Format m n s [a]
+record   :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s)) =>
+            g (Format m n s) -> Format m n s (g Identity)
 
 literal s = Format{
    parse = void (string s),
@@ -114,6 +116,14 @@ f1 <* f2 = Format{
 f1 <|> f2 = Format{
    parse = parse f1 Applicative.<|> parse f2,
    serialize = \a-> serialize f1 a Applicative.<|> serialize f2 a}
+
+optional f = Format{
+   parse = Just <$> parse f Applicative.<|> pure Nothing,
+   serialize = maybe mempty (serialize f)}
+
+many f = Format{
+   parse = let go = (:) <$> parse f <*> go Applicative.<|> pure [] in go,
+   serialize = foldMap (serialize f)}
 
 empty = Format{
    parse = Applicative.empty,
