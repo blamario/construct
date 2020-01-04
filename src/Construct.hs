@@ -19,7 +19,7 @@ import Text.Grampa (InputParsing(ParserInput, anyToken, getInput, string))
 import qualified Text.Parser.Combinators as Parser
 import qualified Data.Attoparsec.ByteString as Attoparsec
 import qualified Text.ParserCombinators.Incremental as Incremental
-import Text.ParserCombinators.Incremental.LeftBiasedLocal (LeftBiasedLocal, Parser)
+import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
 import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
 import qualified Data.Serialize as Serialize
 
@@ -100,6 +100,11 @@ record formats = Format{
    serialize = Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
    }
    where serializeField format (Identity a) = Functor.Const (serialize format a)
+
+infixl 3 <|>
+infixl 4 <$
+infixl 4 <*
+infixl 4 *>
 
 a <$ f = Format{
    parse = a Applicative.<$ parse f,
