@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, StandaloneDeriving, TemplateHaskell, TypeApplications, TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
 
 module Construct where
 
@@ -27,25 +27,6 @@ import qualified Rank2
 import qualified Rank2.TH
 
 import Prelude hiding ((*>), (<*))
-
-
-data BitMap f = BitMap{
-   width :: f Word8,
-   height :: f Word8,
-   pixels :: f [[Word8]]
-   }
-
-deriving instance Show (BitMap Identity)
-
-$(Rank2.TH.deriveAll ''BitMap)
-
-format :: Format (Parser ByteString) Identity ByteString (BitMap Identity)
-format = literal (ASCII.pack "BMP") *> mfix (\r-> record
-  BitMap{
-        width= cereal,
-        height= cereal,
-        pixels= count (fromIntegral $ height r) (count (fromIntegral $ width r) cereal)
-        })
 
 data Format m n s a = Format {
    parse :: m a,
