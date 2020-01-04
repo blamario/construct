@@ -28,6 +28,7 @@ import qualified Rank2.TH
 
 import Prelude hiding ((*>), (<*))
 
+
 data BitMap f = BitMap{
    width :: f Word8,
    height :: f Word8,
@@ -123,11 +124,11 @@ f1 <|> f2 = Format{
    serialize = \a-> serialize f1 a Applicative.<|> serialize f2 a}
 
 optional f = Format{
-   parse = Just <$> parse f Applicative.<|> pure Nothing,
+   parse = Applicative.optional (parse f),
    serialize = maybe mempty (serialize f)}
 
 many f = Format{
-   parse = let go = (:) <$> parse f <*> go Applicative.<|> pure [] in go,
+   parse = Applicative.many (parse f),
    serialize = foldMap (serialize f)}
 
 empty = Format{
