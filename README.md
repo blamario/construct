@@ -54,8 +54,8 @@ Data](https://reasonablypolymorphic.com/blog/higher-kinded-data/). To regain a r
 parameter to `Identity` &mdash; a `BitMap Identity` contains exactly one value of each field.
 
 The other part of the specification is the `format` definition that specifies the bi-directional mapping between the
-in-memory and the serialized form of the bitmap. An isomorphism, to be exact. The two definitions are enough to give
-you the serializer for the format:
+in-memory and the serialized form of the bitmap. An isomorphism, to be precise. The two definitions are enough to automatically
+serialize the in-memory record form into the binary form:
 
 ~~~ {.haskell}
 -- |
@@ -63,7 +63,7 @@ you the serializer for the format:
 -- Identity "BMP\ETX\STX\a\b\t\v\f\r"
 ~~~
 
-as well as its parser:
+and to parse the serialized binary form back into the record structure:
 
 ~~~ {.haskell}
 -- |
@@ -71,6 +71,7 @@ as well as its parser:
 -- [(BitMap {width = Identity 3, height = Identity 2, pixels = Identity [[7,8,9],[11,12,13]]},"")]
 ~~~
 
+Examples of more complex and realistic formats can be found in the `test/examples` directory.
 
 Acknowledgements
 ----------------
