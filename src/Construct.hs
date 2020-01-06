@@ -15,7 +15,7 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ASCII
 import Data.Monoid.Factorial (FactorialMonoid)
 import Data.Monoid.Cancellative (LeftReductiveMonoid)
-import Text.Grampa (InputParsing(ParserInput, anyToken, getInput, string))
+import Text.Grampa (InputParsing(ParserInput, anyToken, string))
 import qualified Text.Parser.Combinators as Parser
 import qualified Text.ParserCombinators.Incremental as Incremental
 import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
