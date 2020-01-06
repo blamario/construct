@@ -2,7 +2,7 @@ Construct.hs
 ============
 
 This is a Haskell implementation of Python's [Construct](https://construct.readthedocs.io/en/latest/intro.html)
-library. It provides a succint and easy way to specify data formats. Before you get to the succint part, though,
+library. It provides a succinct and easy way to specify data formats. Before you get to the succinct part, though,
 you'll probably need a bunch of extensions and imports:
 
 ~~~ {.haskell}
@@ -78,18 +78,18 @@ Acknowledgements
 
 I owe the inspiration for this library to Yair Chuchem and his
 [post](https://yairchu.github.io/posts/codecs-as-prisms.html) that introduced me to Construct. I must also express
-gratitude to the authors of the original library of course. And finally, to the authhors of the paper [Invertible
+gratitude to the authors of the original library of course. And finally, to the authors of the paper [Invertible
 Syntax Descriptions:Unifying Parsing and Pretty
 Printing](https://www.informatik.uni-marburg.de/~rendel/unparse/rendel10invertible.pdf) which I remembered reading
 just in time to avoid following some bad ideas.
 
-Technicalities
---------------
+Implementation notes
+--------------------
 
 I had to overcome two problems while implementing the present library. The first difficulty, mentioned in the
-aforementioned blog post, is how to convert a record of formats into a format of the record. Being the author and
-maintainer of [rank2classes](https://hackage.haskell.org/package/rank2classes), I went for an obvious solution:
-parameterize the record as seen in the example, make it an instance of the
+aforementioned blog post, is how to convert a record of formats into a format of the record. As the author of
+[rank2classes](https://hackage.haskell.org/package/rank2classes), I went for an obvious solution: parameterize the
+record as seen in the example, make it an instance of the
 [`Rank2.Traversable`](https://hackage.haskell.org/package/rank2classes-1.3.1.2/docs/Rank2.html#t:Traversable) class,
 and apply [`Rank2.traverse`](https://hackage.haskell.org/package/rank2classes-1.3.1.2/docs/Rank2.html#v:traverse) to
 it.
