@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances, GADTs #-}
 
 module Construct where
 
@@ -9,16 +9,18 @@ import Control.Monad.Fix (MonadFix)
 import Data.Functor ((<$>), void)
 import Data.Functor.Identity
 import qualified Data.Functor.Const as Functor
+import Data.Kind (Constraint, Type)
+import Data.Maybe (fromMaybe)
 import Data.Word (Word, Word8)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ASCII
 import Data.Monoid.Factorial (FactorialMonoid)
-import Data.Monoid.Cancellative (LeftReductiveMonoid)
+import Data.Semigroup.Cancellative (LeftReductive)
 import Text.Grampa (InputParsing(ParserInput, anyToken, string))
 import qualified Text.Parser.Combinators as Parser
 import qualified Text.ParserCombinators.Incremental as Incremental
-import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
+import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser, LeftBiasedLocal)
 import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
 import qualified Data.Serialize as Serialize
 
@@ -40,6 +42,19 @@ data Format m n s a = Format {
    serialize :: a -> n s
    }
 
+-- | A subclass of 'InputParsing' for parsers that can switch the input stream type
+class InputMappableParsing m where
+   -- | Converts a parser accepting one input stream type to another. The functions @forth@ and @back@ must be inverses of
+   -- each other and they must distribute through @<>@:
+   -- > f (s1 <> s2) == f s1 <> f s2
+   mapParserInput :: (InputParsing (m s), s ~ ParserInput (m s), Monoid s, Monoid s') =>
+                     (s -> s') -> (s' -> s) -> m s a -> m s' a
+   -- | Converts a parser accepting one input stream type to another just like 'mapParserInput', except the argument
+   -- functions can return @Nothing@ to indicate they need more input.
+   
+   mapMaybeParserInput :: (InputParsing (m s), s ~ ParserInput (m s), Monoid s, Monoid s') =>
+                          (s -> Maybe s') -> (s' -> Maybe s) -> m s a -> m s' a
+
 -- | A subclass of 'MonadFix' for monads that can fix a function that handles higher-kinded data
 class MonadFix m => FixTraversable m where
    -- | This specialized form of 'Rank2.traverse' can be used inside 'mfix'.
@@ -50,6 +65,10 @@ class MonadFix m => FixTraversable m where
 
 instance Monoid s => FixTraversable (Incremental.Parser t s) where
    fixSequence = Incremental.record
+
+instance InputMappableParsing (Incremental.Parser LeftBiasedLocal) where
+   mapParserInput = Incremental.mapInput
+   mapMaybeParserInput = Incremental.mapMaybeInput
 
 (<$)     :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 (*>)     :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
@@ -72,6 +91,28 @@ literal s = Format{
    parse = void (string s),
    serialize = const (pure s)
    }
+
+-- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead
+mapSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
+                  s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
+                 (s -> t) -> (t -> s) -> Format (m s) n s a -> Format (m t) n t a
+mapSerialized f f' format = Format{
+   parse = mapParserInput f f' (parse format),
+   serialize = (f <$>) . serialize format}
+
+-- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead.
+mapMaybeSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
+                  s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
+                 (s -> Maybe t) -> (t -> Maybe s) -> Format (m s) n s a -> Format (m t) n t a
+mapMaybeSerialized f f' format = Format{
+   parse = mapMaybeParserInput f f' (parse format),
+   serialize = (fromMaybe (error "Partial serialization") . f <$>) . serialize format}
+
+-- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead
+mapValue :: Functor m => (a -> b) -> (b -> a) -> Format m n s a -> Format m n s b
+mapValue f f' format = Format{
+   parse = f <$> parse format,
+   serialize = serialize format . f'}
 
 -- | A trivial format for a single byte
 byte = Format{
