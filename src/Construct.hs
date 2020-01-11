@@ -79,6 +79,7 @@ many     :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Fo
 empty    :: (Alternative m, Alternative n) => Format m n s a
 mfix     :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal  :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
+value    :: (Eq a, Alternative m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
 byte     :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
 cereal   :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString a
 cereal'  :: (Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) => Get a -> Putter a -> Format m n ByteString a
@@ -90,6 +91,12 @@ record   :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s),
 literal s = Format{
    parse = void (string s),
    serialize = const (pure s)
+   }
+
+-- | A fixed expected value serialized through the agument format
+value f v = Format{
+   parse = void (parse f >>= \x-> if x == v then pure x else Applicative.empty),
+   serialize = \()-> serialize f v
    }
 
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead

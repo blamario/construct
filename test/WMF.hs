@@ -163,92 +163,93 @@ headerFormat = record PlaceableHeader{
 recordFormat :: Format (Parser ByteString) Maybe ByteString (Record Identity)
 recordFormat = mfix $ \this-> record Record{
    recordSize = cereal' getWord32le putWord32le,
-   function = AbortDoc <$ literal (ByteString.pack [0x52, 0x00]) <|>
-              Aldus_Header <$ literal (ByteString.pack [0x01, 0x00]) <|>
-              AnimatePalette <$ literal (ByteString.pack [0x36, 0x04]) <|>
-              Arc <$ literal (ByteString.pack [0x17, 0x08]) <|>
-              BitBlt <$ literal (ByteString.pack [0x22, 0x09]) <|>
-              Chord <$ literal (ByteString.pack [0x30, 0x08]) <|>
-              CLP_Header16 <$ literal (ByteString.pack [0x02, 0x00]) <|>
-              CLP_Header32 <$ literal (ByteString.pack [0x03, 0x00]) <|>
-              CreateBitmap <$ literal (ByteString.pack [0xFE, 0x06]) <|>
-              CreateBitmapIndirect <$ literal (ByteString.pack [0xFD, 0x02]) <|>
-              CreateBrush <$ literal (ByteString.pack [0xF8, 0x00]) <|>
-              CreateBrushIndirect <$ literal (ByteString.pack [0xFC, 0x02]) <|>
-              CreateFontIndirect <$ literal (ByteString.pack [0xFB, 0x02]) <|>
-              CreatePalette <$ literal (ByteString.pack [0xF7, 0x00]) <|>
-              CreatePatternBrush <$ literal (ByteString.pack [0xF9, 0x01]) <|>
-              CreatePenIndirect <$ literal (ByteString.pack [0xFA, 0x02]) <|>
-              CreateRegion <$ literal (ByteString.pack [0xFF, 0x06]) <|>
-              DeleteObject <$ literal (ByteString.pack [0xF0, 0x01]) <|>
-              DibBitblt <$ literal (ByteString.pack [0x40, 0x09]) <|>
-              DibCreatePatternBrush <$ literal (ByteString.pack [0x42, 0x01]) <|>
-              DibStretchBlt <$ literal (ByteString.pack [0x41, 0x0B]) <|>
-              DrawText <$ literal (ByteString.pack [0x2F, 0x06]) <|>
-              Ellipse <$ literal (ByteString.pack [0x18, 0x04]) <|>
-              EndDoc <$ literal (ByteString.pack [0x5E, 0x00]) <|>
-              EndPage <$ literal (ByteString.pack [0x50, 0x00]) <|>
-              EOF <$ literal (ByteString.pack [0x00, 0x00]) <|>
-              Escape <$ literal (ByteString.pack [0x26, 0x06]) <|>
-              ExcludeClipRect <$ literal (ByteString.pack [0x15, 0x04]) <|>
-              ExtFloodFill <$ literal (ByteString.pack [0x48, 0x05]) <|>
-              ExtTextOut <$ literal (ByteString.pack [0x32, 0x0A]) <|>
-              FillRegion <$ literal (ByteString.pack [0x28, 0x02]) <|>
-              FloodFill <$ literal (ByteString.pack [0x19, 0x04]) <|>
-              FrameRegion <$ literal (ByteString.pack [0x29, 0x04]) <|>
-              Header <$ literal (ByteString.pack [0x04, 0x00]) <|>
-              IntersectClipRect <$ literal (ByteString.pack [0x16, 0x04]) <|>
-              InvertRegion <$ literal (ByteString.pack [0x2A, 0x01]) <|>
-              LineTo <$ literal (ByteString.pack [0x13, 0x02]) <|>
-              MoveTo <$ literal (ByteString.pack [0x14, 0x02]) <|>
-              OffsetClipRgn <$ literal (ByteString.pack [0x20, 0x02]) <|>
-              OffsetViewportOrg <$ literal (ByteString.pack [0x11, 0x02]) <|>
-              OffsetWindowOrg <$ literal (ByteString.pack [0x0F, 0x02]) <|>
-              PaintRegion <$ literal (ByteString.pack [0x2B, 0x01]) <|>
-              PatBlt <$ literal (ByteString.pack [0x1D, 0x06]) <|>
-              Pie <$ literal (ByteString.pack [0x1A, 0x08]) <|>
-              Polygon <$ literal (ByteString.pack [0x24, 0x03]) <|>
-              Polyline <$ literal (ByteString.pack [0x25, 0x03]) <|>
-              PolyPolygon <$ literal (ByteString.pack [0x38, 0x05]) <|>
-              RealizePalette <$ literal (ByteString.pack [0x35, 0x00]) <|>
-              Rectangle <$ literal (ByteString.pack [0x1B, 0x04]) <|>
-              ResetDC <$ literal (ByteString.pack [0x4C, 0x01]) <|>
-              ResizePalette <$ literal (ByteString.pack [0x39, 0x01]) <|>
-              RestoreDC <$ literal (ByteString.pack [0x27, 0x01]) <|>
-              RoundRect <$ literal (ByteString.pack [0x1C, 0x06]) <|>
-              SaveDC <$ literal (ByteString.pack [0x1E, 0x00]) <|>
-              ScaleViewportExt <$ literal (ByteString.pack [0x12, 0x04]) <|>
-              ScaleWindowExt <$ literal (ByteString.pack [0x10, 0x04]) <|>
-              SelectClipRegion <$ literal (ByteString.pack [0x2C, 0x01]) <|>
-              SelectObject <$ literal (ByteString.pack [0x2D, 0x01]) <|>
-              SelectPalette <$ literal (ByteString.pack [0x34, 0x02]) <|>
-              SetBKColor <$ literal (ByteString.pack [0x01, 0x02]) <|>
-              SetBKMode <$ literal (ByteString.pack [0x02, 0x01]) <|>
-              SetDibToDev <$ literal (ByteString.pack [0x33, 0x0D]) <|>
-              SelLayout <$ literal (ByteString.pack [0x49, 0x01]) <|>
-              SetMapMode <$ literal (ByteString.pack [0x03, 0x01]) <|>
-              SetMapperFlags <$ literal (ByteString.pack [0x31, 0x02]) <|>
-              SetPalEntries <$ literal (ByteString.pack [0x37, 0x00]) <|>
-              SetPixel <$ literal (ByteString.pack [0x1F, 0x04]) <|>
-              SetPolyFillMode <$ literal (ByteString.pack [0x06, 0x01]) <|>
-              SetReLabs <$ literal (ByteString.pack [0x05, 0x01]) <|>
-              SetROP2 <$ literal (ByteString.pack [0x04, 0x01]) <|>
-              SetStretchBltMode <$ literal (ByteString.pack [0x07, 0x01]) <|>
-              SetTextAlign <$ literal (ByteString.pack [0x2E, 0x01]) <|>
-              SetTextCharExtra <$ literal (ByteString.pack [0x08, 0x01]) <|>
-              SetTextColor <$ literal (ByteString.pack [0x09, 0x02]) <|>
-              SetTextJustification <$ literal (ByteString.pack [0x0A, 0x02]) <|>
-              SetViewportExt <$ literal (ByteString.pack [0x0E, 0x02]) <|>
-              SetViewportOrg <$ literal (ByteString.pack [0x0D, 0x02]) <|>
-              SetWindowExt <$ literal (ByteString.pack [0x0C, 0x02]) <|>
-              SetWindowOrg <$ literal (ByteString.pack [0x0B, 0x02]) <|>
-              StartDoc <$ literal (ByteString.pack [0x4D, 0x01]) <|>
-              StartPage <$ literal (ByteString.pack [0x4F, 0x00]) <|>
-              StretchBlt <$ literal (ByteString.pack [0x23, 0x0B]) <|>
-              StretchDIB <$ literal (ByteString.pack [0x43, 0x0F]) <|>
-              TextOut <$ literal (ByteString.pack [0x21, 0x05]),
+   function = AbortDoc <$ word16le 0x0052 <|>
+              Aldus_Header <$ word16le 0x0001 <|>
+              AnimatePalette <$ word16le 0x0436 <|>
+              Arc <$ word16le 0x0817 <|>
+              BitBlt <$ word16le 0x0922 <|>
+              Chord <$ word16le 0x0830 <|>
+              CLP_Header16 <$ word16le 0x0002 <|>
+              CLP_Header32 <$ word16le 0x0003 <|>
+              CreateBitmap <$ word16le 0x06FE <|>
+              CreateBitmapIndirect <$ word16le 0x02FD <|>
+              CreateBrush <$ word16le 0x00F8 <|>
+              CreateBrushIndirect <$ word16le 0x02FC <|>
+              CreateFontIndirect <$ word16le 0x02FB <|>
+              CreatePalette <$ word16le 0x00F7 <|>
+              CreatePatternBrush <$ word16le 0x01F9 <|>
+              CreatePenIndirect <$ word16le 0x02FA <|>
+              CreateRegion <$ word16le 0x06FF <|>
+              DeleteObject <$ word16le 0x01F0 <|>
+              DibBitblt <$ word16le 0x0940 <|>
+              DibCreatePatternBrush <$ word16le 0x0142 <|>
+              DibStretchBlt <$ word16le 0x0B41 <|>
+              DrawText <$ word16le 0x062F <|>
+              Ellipse <$ word16le 0x0418 <|>
+              EndDoc <$ word16le 0x005E <|>
+              EndPage <$ word16le 0x0050 <|>
+              EOF <$ word16le 0x0000 <|>
+              Escape <$ word16le 0x0626 <|>
+              ExcludeClipRect <$ word16le 0x0415 <|>
+              ExtFloodFill <$ word16le 0x0548 <|>
+              ExtTextOut <$ word16le 0x0A32 <|>
+              FillRegion <$ word16le 0x0228 <|>
+              FloodFill <$ word16le 0x0419 <|>
+              FrameRegion <$ word16le 0x0429 <|>
+              Header <$ word16le 0x0004 <|>
+              IntersectClipRect <$ word16le 0x0416 <|>
+              InvertRegion <$ word16le 0x012A <|>
+              LineTo <$ word16le 0x0213 <|>
+              MoveTo <$ word16le 0x0214 <|>
+              OffsetClipRgn <$ word16le 0x0220 <|>
+              OffsetViewportOrg <$ word16le 0x0211 <|>
+              OffsetWindowOrg <$ word16le 0x020F <|>
+              PaintRegion <$ word16le 0x012B <|>
+              PatBlt <$ word16le 0x061D <|>
+              Pie <$ word16le 0x081A <|>
+              Polygon <$ word16le 0x0324 <|>
+              Polyline <$ word16le 0x0325 <|>
+              PolyPolygon <$ word16le 0x0538 <|>
+              RealizePalette <$ word16le 0x0035 <|>
+              Rectangle <$ word16le 0x041B <|>
+              ResetDC <$ word16le 0x014C <|>
+              ResizePalette <$ word16le 0x0139 <|>
+              RestoreDC <$ word16le 0x0127 <|>
+              RoundRect <$ word16le 0x061C <|>
+              SaveDC <$ word16le 0x001E <|>
+              ScaleViewportExt <$ word16le 0x0412 <|>
+              ScaleWindowExt <$ word16le 0x0410 <|>
+              SelectClipRegion <$ word16le 0x012C <|>
+              SelectObject <$ word16le 0x012D <|>
+              SelectPalette <$ word16le 0x0234 <|>
+              SetBKColor <$ word16le 0x0201 <|>
+              SetBKMode <$ word16le 0x0102 <|>
+              SetDibToDev <$ word16le 0x0D33 <|>
+              SelLayout <$ word16le 0x0149 <|>
+              SetMapMode <$ word16le 0x0103 <|>
+              SetMapperFlags <$ word16le 0x0231 <|>
+              SetPalEntries <$ word16le 0x0037 <|>
+              SetPixel <$ word16le 0x041F <|>
+              SetPolyFillMode <$ word16le 0x0106 <|>
+              SetReLabs <$ word16le 0x0105 <|>
+              SetROP2 <$ word16le 0x0104 <|>
+              SetStretchBltMode <$ word16le 0x0107 <|>
+              SetTextAlign <$ word16le 0x012E <|>
+              SetTextCharExtra <$ word16le 0x0108 <|>
+              SetTextColor <$ word16le 0x0209 <|>
+              SetTextJustification <$ word16le 0x020A <|>
+              SetViewportExt <$ word16le 0x020E <|>
+              SetViewportOrg <$ word16le 0x020D <|>
+              SetWindowExt <$ word16le 0x020C <|>
+              SetWindowOrg <$ word16le 0x020B <|>
+              StartDoc <$ word16le 0x014D <|>
+              StartPage <$ word16le 0x004F <|>
+              StretchBlt <$ word16le 0x0B23 <|>
+              StretchDIB <$ word16le 0x0F43 <|>
+              TextOut <$ word16le 0x0521,
    params = count (fromIntegral (recordSize this) - 3) (cereal' getWord16le putWord16le)
    }
+   where word16le = value (cereal' getWord16le putWord16le)
 
 $(Rank2.TH.deriveAll ''File)
 $(Rank2.TH.deriveAll ''PlaceableHeader)
