@@ -16,6 +16,7 @@ import Test.Tasty.HUnit (assertFailure, assertEqual, testCase)
 
 import Construct
 import qualified MBR
+import qualified TAR
 import qualified WMF
 
 data TestFormat = forall f. TestFormat (Format (Parser ByteString) Maybe ByteString (f Identity))
@@ -30,8 +31,9 @@ exampleTree ancestry path =
          then (:[]) . testGroup path . concat <$> (listDirectory fullPath >>= mapM (exampleTree fullPath))
          else do blob <- ByteString.readFile fullPath
                  let format
-                        | ".wmf" `isSuffixOf` path = TestFormat WMF.fileFormat
                         | ".mbr" `isSuffixOf` path = TestFormat MBR.format
+                        | ".tar" `isSuffixOf` path = TestFormat TAR.archive
+                        | ".wmf" `isSuffixOf` path = TestFormat WMF.fileFormat
                      Just blob'
                         | TestFormat f <- format,
                           [(structure, remainder)] <- Incremental.completeResults (Incremental.feedEof $
