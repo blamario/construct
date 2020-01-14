@@ -1,4 +1,8 @@
 {-# LANGUAGE GADTs #-}
+
+-- | This module exports the primitives and combinators for constructing formats with sub- or cross-byte
+-- components. See @test/MBR.hs@ for an example of its use.
+
 module Construct.Bits
   (Bits, bit,
    -- * The combinators for converting between 'Bits' and 'ByteString' input streams
@@ -10,7 +14,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.List as List
 import Data.Word (Word8)
-import Text.Grampa (InputParsing(ParserInput, anyToken, string))
 
 import Construct
 import Construct.Classes

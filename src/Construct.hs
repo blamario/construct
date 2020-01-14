@@ -8,7 +8,7 @@ module Construct
   -- * Combinators
   (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>),
   empty, optional, optionWithDefault, many, count,
-  -- ** Self-referential record format support
+  -- ** Self-referential record support
   mfix, record,
   -- ** Mapping over a 'Format'
   mapSerialized, mapMaybeSerialized, mapValue, mapMaybeValue,
@@ -18,7 +18,7 @@ module Construct
   -- * Primitives
   literal, byte, char,
   cereal, cereal',
-  Construct.take, Construct.takeWhile, takeWhile1, takeCharsWhile, takeCharsWhile1
+  Construct.take, Construct.takeWhile, Construct.takeWhile1, Construct.takeCharsWhile, Construct.takeCharsWhile1
 ) where
 
 import qualified Control.Applicative as Applicative
@@ -41,8 +41,6 @@ import Data.Monoid.Factorial (FactorialMonoid)
 import Data.Monoid.Textual (TextualMonoid)
 import Data.Semigroup.Cancellative (LeftReductive)
 import Data.String (IsString, fromString)
-import Text.Grampa (InputParsing(ParserInput, anyToken, string), InputCharParsing)
-import qualified Text.Grampa as Grampa
 import qualified Text.Parser.Combinators as Parser
 import qualified Text.Parser.Char as Parser.Char
 import qualified Text.ParserCombinators.Incremental as Incremental
@@ -52,6 +50,7 @@ import qualified Data.Serialize as Serialize
 
 import qualified Rank2
 
+import qualified Construct.Classes as Input
 import Construct.Classes
 import Construct.Internal
 
@@ -88,7 +87,7 @@ padded template format = Format{
    serialize = (padRight <$>) . serialize format
    }
    where padRight s = s <> Factorial.drop (Factorial.length s) template
-         parsePadding s = if Null.null padding then pure s else s Applicative.<$ Grampa.string padding
+         parsePadding s = if Null.null padding then pure s else s Applicative.<$ Input.string padding
             where padding = Factorial.drop (Factorial.length s) template
 
 -- | Modifies the serialized form of the given format by padding it with the given template. The serialized form has
@@ -101,13 +100,13 @@ padded1 template format = Format{
    }
    where padRight s = if Null.null padding then Applicative.empty else pure (s <> padding)
             where padding = Factorial.drop (Factorial.length s) template
-         parsePadding s = if Null.null padding then Applicative.empty else s Applicative.<$ Grampa.string padding
+         parsePadding s = if Null.null padding then Applicative.empty else s Applicative.<$ Input.string padding
             where padding = Factorial.drop (Factorial.length s) template
 
 -- | Format whose in-memory value is a fixed-size prefix of the serialized value
 take :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => Int -> Format m n s s
 take n = Format{
-   parse = mconcat <$> Parser.count n anyToken,
+   parse = Input.take n,
    serialize = \s-> if Factorial.length s == n then pure s else Applicative.empty
    }
 
@@ -115,7 +114,7 @@ take n = Format{
 -- given predicate.
 takeWhile :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => (s -> Bool) -> Format m n s s
 takeWhile pred = Format{
-   parse = Grampa.takeWhile pred,
+   parse = Input.takeWhile pred,
    serialize = \s-> if Null.null s || Null.null (Factorial.dropWhile pred s) then pure s else Applicative.empty
    }
 
@@ -123,7 +122,7 @@ takeWhile pred = Format{
 -- satisfy the given predicate.
 takeWhile1 :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => (s -> Bool) -> Format m n s s
 takeWhile1 pred = Format{
-   parse = Grampa.takeWhile1 pred,
+   parse = Input.takeWhile1 pred,
    serialize = \s-> if not (Null.null s) && Null.null (Factorial.dropWhile pred s) then pure s else Applicative.empty
    }
 
@@ -132,7 +131,7 @@ takeWhile1 pred = Format{
 takeCharsWhile :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Alternative n) =>
                   (Char -> Bool) -> Format m n s s
 takeCharsWhile pred = Format{
-   parse = Grampa.takeCharsWhile pred,
+   parse = Input.takeCharsWhile pred,
    serialize = \s-> if Null.null s || Null.null (Textual.dropWhile_ False pred s) then pure s else Applicative.empty
    }
 
@@ -141,7 +140,7 @@ takeCharsWhile pred = Format{
 takeCharsWhile1 :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Alternative n) =>
                    (Char -> Bool) -> Format m n s s
 takeCharsWhile1 pred = Format{
-   parse = Grampa.takeCharsWhile1 pred,
+   parse = Input.takeCharsWhile1 pred,
    serialize = \s-> if not (Null.null s) && Null.null (Textual.dropWhile_ False pred s) then pure s
                     else Applicative.empty
    }
