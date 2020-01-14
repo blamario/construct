@@ -1,5 +1,8 @@
 {-# LANGUAGE GADTs #-}
-module Construct.Bits (Bits, bit, bigEndianBitsOf, bigEndianBytesOf, littleEndianBitsOf, littleEndianBytesOf) where
+module Construct.Bits
+  (Bits, bit,
+   -- * The combinators for converting between 'Bits' and 'ByteString' input streams
+   bigEndianBitsOf, bigEndianBytesOf, littleEndianBitsOf, littleEndianBytesOf) where
 
 import Data.Bits (clearBit, setBit, testBit)
 import Data.Bool (bool)
@@ -10,7 +13,10 @@ import Data.Word (Word8)
 import Text.Grampa (InputParsing(ParserInput, anyToken, string))
 
 import Construct
+import Construct.Classes
+import Construct.Internal
 
+-- | The list of bits
 type Bits = [Bool]
 
 bit :: (Applicative n, InputParsing m, ParserInput m ~ Bits) => Format m n Bits Bool
@@ -27,6 +33,7 @@ littleEndianBytesOf :: (InputParsing (m Bits), InputParsing (m ByteString), Inpu
                         ParserInput (m Bits) ~ Bits, ParserInput (m ByteString) ~ ByteString) =>
                        Format (m Bits) n Bits a -> Format (m ByteString) n ByteString a
 
+-- | The primitive format of a single bit
 bit = Format{
    parse = head <$> anyToken,
    serialize = pure . (:[])}

@@ -1,6 +1,25 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs #-}
 
-module Construct where
+module Construct
+(
+  -- * The type
+  Format, parse, serialize,
+
+  -- * Combinators
+  (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>),
+  empty, optional, optionWithDefault, many, count,
+  -- ** Self-referential record format support
+  mfix, record,
+  -- ** Mapping over a 'Format'
+  mapSerialized, mapMaybeSerialized, mapValue, mapMaybeValue,
+  -- ** Constraining a 'Format'
+  value, padded, padded1,
+
+  -- * Primitives
+  literal, byte, char,
+  cereal, cereal',
+  Construct.take, Construct.takeWhile, takeWhile1, takeCharsWhile, takeCharsWhile1
+) where
 
 import qualified Control.Applicative as Applicative
 import qualified Control.Monad.Fix as Monad.Fix
@@ -32,50 +51,9 @@ import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runG
 import qualified Data.Serialize as Serialize
 
 import qualified Rank2
-import qualified Rank2.TH
 
--- | The central type. The four type parameters are:
---
---   * @m@ is the type of the parser for the format
---   * @n@ is the container type for the serialized form of the value, typically 'Identity' unless something
---     'Alternative' is called for.
---   * @s@ is the type of the serialized value, typically 'ByteString'
---   * @a@ is the type of the value in the program
---
--- The @parse@ and @serialize@ fields can be used to perform the two sides of the conversion between the in-memory and
--- serialized form of the value.
-data Format m n s a = Format {
-   parse :: m a,
-   serialize :: a -> n s
-   }
-
--- | A subclass of 'InputParsing' for parsers that can switch the input stream type
-class InputMappableParsing m where
-   -- | Converts a parser accepting one input stream type to another. The functions @forth@ and @back@ must be inverses of
-   -- each other and they must distribute through @<>@:
-   -- > f (s1 <> s2) == f s1 <> f s2
-   mapParserInput :: (InputParsing (m s), s ~ ParserInput (m s), Monoid s, Monoid s') =>
-                     (s -> s') -> (s' -> s) -> m s a -> m s' a
-   -- | Converts a parser accepting one input stream type to another just like 'mapParserInput', except the argument
-   -- functions can return @Nothing@ to indicate they need more input.
-   
-   mapMaybeParserInput :: (InputParsing (m s), s ~ ParserInput (m s), Monoid s, Monoid s') =>
-                          (s -> Maybe s') -> (s' -> Maybe s) -> m s a -> m s' a
-
--- | A subclass of 'MonadFix' for monads that can fix a function that handles higher-kinded data
-class MonadFix m => FixTraversable m where
-   -- | This specialized form of 'Rank2.traverse' can be used inside 'mfix'.
-   --
-   -- > mfix (fixSequence . f) == fix (fixSequence . f =<<)
-   fixSequence :: (Rank2.Traversable g, Applicative n) => g m -> m (g n)
-   fixSequence = Rank2.traverse (pure <$>)
-
-instance Monoid s => FixTraversable (Incremental.Parser t s) where
-   fixSequence = Incremental.record
-
-instance InputMappableParsing (Incremental.Parser LeftBiasedLocal) where
-   mapParserInput = Incremental.mapInput
-   mapMaybeParserInput = Incremental.mapMaybeInput
+import Construct.Classes
+import Construct.Internal
 
 (<$)     :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 (*>)     :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
