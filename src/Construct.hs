@@ -63,7 +63,7 @@ many     :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Fo
 empty    :: (Alternative m, Alternative n) => Format m n s a
 mfix     :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal  :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
-value    :: (Eq a, Alternative m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
+value    :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
 byte     :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
 char     :: (Parser.Char.CharParsing m, IsString (ParserInput m), Applicative n) => Format m n ByteString Char
 cereal   :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString a
@@ -100,7 +100,8 @@ padded1 template format = Format{
    }
    where padRight s = if Null.null padding then Applicative.empty else pure (s <> padding)
             where padding = Factorial.drop (Factorial.length s) template
-         parsePadding s = if Null.null padding then Applicative.empty else s Applicative.<$ Input.string padding
+         parsePadding s = if Null.null padding then Parser.unexpected "overlong format to pad"
+                            else s Applicative.<$ Input.string padding
             where padding = Factorial.drop (Factorial.length s) template
 
 -- | Format whose in-memory value is a fixed-size prefix of the serialized value
@@ -147,7 +148,7 @@ takeCharsWhile1 pred = Format{
 
 -- | A fixed expected value serialized through the agument format
 value f v = Format{
-   parse = void (parse f >>= \x-> if x == v then pure x else Applicative.empty),
+   parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected "a different value"),
    serialize = \()-> serialize f v
    }
 
@@ -174,10 +175,10 @@ mapValue f f' format = Format{
    serialize = serialize format . f'}
 
 -- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead
-mapMaybeValue :: (Monad m, Alternative m, Alternative n) =>
+mapMaybeValue :: (Monad m, Parser.Parsing m, Alternative n) =>
                  (a -> Maybe b) -> (b -> Maybe a) -> Format m n s a -> Format m n s b
 mapMaybeValue f f' format = Format{
-   parse = parse format >>= maybe Applicative.empty pure . f,
+   parse = parse format >>= maybe (Parser.unexpected "unmappable parsed value") pure . f,
    serialize = maybe Applicative.empty (serialize format) . f'}
 
 -- | A trivial format for a single byte in a 'ByteString'
