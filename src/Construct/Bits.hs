@@ -36,6 +36,9 @@ littleEndianBytesOf :: (InputParsing (m Bits), InputParsing (m ByteString), Inpu
                        Format (m Bits) n Bits a -> Format (m ByteString) n ByteString a
 
 -- | The primitive format of a single bit
+--
+-- >>> testParse bit [True, False, False, True]
+-- Right [(True,[False,False,True])]
 bit = Format{
    parse = head <$> anyToken,
    serialize = pure . (:[])}

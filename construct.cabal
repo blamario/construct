@@ -51,6 +51,7 @@ test-suite             doctests
                        bytestring >= 0.10 && < 0.11, incremental-parser >= 0.4 && < 0.5, rank2classes >= 1.0.2 && < 1.4,
                        doctest >= 0.8
   build-tool-depends:  markdown-unlit:markdown-unlit >= 0.5 && < 0.6
+  x-doctest-options:   -XTypeApplications
 
 test-suite             examples
   type:                exitcode-stdio-1.0

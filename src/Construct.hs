@@ -18,7 +18,9 @@ module Construct
   -- * Primitives
   literal, byte, char,
   cereal, cereal',
-  Construct.take, Construct.takeWhile, Construct.takeWhile1, Construct.takeCharsWhile, Construct.takeCharsWhile1
+  Construct.take, Construct.takeWhile, Construct.takeWhile1, Construct.takeCharsWhile, Construct.takeCharsWhile1,
+  -- * Test helpers
+  testParse, testSerialize
 ) where
 
 import qualified Control.Applicative as Applicative
@@ -39,16 +41,25 @@ import Data.Monoid.Textual (TextualMonoid)
 import Data.String (IsString, fromString)
 import qualified Text.Parser.Combinators as Parser
 import qualified Text.Parser.Char as Parser.Char
+import qualified Text.ParserCombinators.Incremental as Incremental
+import Text.ParserCombinators.Incremental.Symmetric (Symmetric)
 import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
 import qualified Data.Serialize as Serialize
 
 import qualified Rank2
 
 import qualified Construct.Classes as Input
-import Construct.Classes
+import Construct.Classes (InputParsing (ParserInput), InputCharParsing, InputMappableParsing, FixTraversable)
 import Construct.Internal
 
-import Prelude hiding (pred)
+import Prelude hiding (pred, take, takeWhile)
+
+-- $setup
+-- >>> import Data.Char (isDigit)
+-- >>> import Data.Serialize.Get (getWord16le)
+-- >>> import Data.Serialize.Put (putWord16le)
+-- >>> import Data.Word (Word16)
+-- >>> import Numeric (showInt)
 
 (<$)     :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 (*>)     :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
@@ -61,21 +72,29 @@ mfix     :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal  :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
 value    :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
 byte     :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
-char     :: (Parser.Char.CharParsing m, IsString (ParserInput m), Applicative n) => Format m n ByteString Char
+char     :: (Parser.Char.CharParsing m, ParserInput m ~ s, IsString s, Applicative n) => Format m n s Char
 cereal   :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString a
 cereal'  :: (Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) =>
             Get a -> Putter a -> Format m n ByteString a
-count    :: (Applicative m, Monoid (n s)) => Int -> Format m n s a -> Format m n s [a]
+count    :: (Applicative m, Alternative n, Monoid s) => Int -> Format m n s a -> Format m n s [a]
 record   :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s), Applicative o, Foldable o) =>
             g (Format m n s) -> Format m n s (g o)
 
--- | A literal serialized form, such as a fixed prefix, corresponding to no value
+-- | A literal serialized form, such as a magic constant, corresponding to no value
+--
+-- >>> testParse (literal "Hi") "Hi there"
+-- Right [(()," there")]
 literal s = Format{
-   parse = void (string s),
+   parse = void (Input.string s),
    serialize = const (pure s)
    }
 
 -- | Modifies the serialized form of the given format by padding it with the given template if it's any shorter
+--
+-- >>> testParse (padded "----" $ takeCharsWhile isDigit) "12--3---"
+-- Right [("12","3---")]
+-- >>> testSerialize (padded "----" $ takeCharsWhile isDigit) "12"
+-- Right "12--"
 padded :: (Monad m, Functor n, InputParsing m, ParserInput m ~ s, FactorialMonoid s) =>
           s -> Format m n s s -> Format m n s s
 padded template format = Format{
@@ -101,22 +120,47 @@ padded1 template format = Format{
             where padding = Factorial.drop (Factorial.length s) template
 
 -- | Format whose in-memory value is a fixed-size prefix of the serialized value
+--
+-- >>> testParse (take 3) "12345"
+-- Right [("123","45")]
+-- >>> testSerialize (take 3) "123"
+-- Right "123"
+-- >>> testSerialize (take 3) "1234"
+-- Left ""
 take :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => Int -> Format m n s s
 take n = Format{
    parse = Input.take n,
    serialize = \s-> if Factorial.length s == n then pure s else Applicative.empty
    }
 
--- | Format whose in-memory value is the longest prefix of the serialized value whose smallest parts all satisfy the
--- given predicate.
+-- | Format whose in-memory value is the longest prefix of the serialized value smallest parts of which all satisfy
+-- the given predicate.
+--
+-- >>> testParse (takeWhile (> "b")) "abcd"
+-- Right [("","abcd")]
+-- >>> testParse (takeWhile (> "b")) "dcba"
+-- Right [("dc","ba")]
+-- >>> testSerialize (takeWhile (> "b")) "dcba"
+-- Left ""
+-- >>> testSerialize (takeWhile (> "b")) "dc"
+-- Right "dc"
+-- >>> testSerialize (takeWhile (> "b")) ""
+-- Right ""
 takeWhile :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => (s -> Bool) -> Format m n s s
 takeWhile pred = Format{
    parse = Input.takeWhile pred,
    serialize = \s-> if Null.null s || Null.null (Factorial.dropWhile pred s) then pure s else Applicative.empty
    }
 
--- | Format whose in-memory value is the longest non-empty prefix of the serialized value whose smallest parts all
+-- | Format whose in-memory value is the longest non-empty prefix of the serialized value smallest parts of which all
 -- satisfy the given predicate.
+--
+-- >>> testParse (takeWhile1 (> "b")) "abcd"
+-- Left "takeWhile1"
+-- >>> testSerialize (takeWhile1 (> "b")) ""
+-- Left ""
+-- >>> testSerialize (takeWhile1 (> "b")) "dc"
+-- Right "dc"
 takeWhile1 :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => (s -> Bool) -> Format m n s s
 takeWhile1 pred = Format{
    parse = Input.takeWhile1 pred,
@@ -125,6 +169,17 @@ takeWhile1 pred = Format{
 
 -- | Format whose in-memory value is the longest prefix of the serialized value that consists of characters which all
 -- satisfy the given predicate.
+--
+-- >>> testParse (takeCharsWhile isDigit) "a12"
+-- Right [("","a12")]
+-- >>> testParse (takeCharsWhile isDigit) "12a"
+-- Right [("12","a")]
+-- >>> testSerialize (takeCharsWhile isDigit) "12a"
+-- Left ""
+-- >>> testSerialize (takeCharsWhile isDigit) "12"
+-- Right "12"
+-- >>> testSerialize (takeCharsWhile isDigit) ""
+-- Right ""
 takeCharsWhile :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Alternative n) =>
                   (Char -> Bool) -> Format m n s s
 takeCharsWhile pred = Format{
@@ -134,6 +189,15 @@ takeCharsWhile pred = Format{
 
 -- | Format whose in-memory value is the longest non-empty prefix of the serialized value that consists of characters
 -- which all satisfy the given predicate.
+--
+-- >>> testParse (takeCharsWhile1 isDigit) "a12"
+-- Left "takeCharsWhile1"
+-- >>> testParse (takeCharsWhile1 isDigit) "12a"
+-- Right [("12","a")]
+-- >>> testSerialize (takeCharsWhile1 isDigit) "12"
+-- Right "12"
+-- >>> testSerialize (takeCharsWhile1 isDigit) ""
+-- Left ""
 takeCharsWhile1 :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Alternative n) =>
                    (Char -> Bool) -> Format m n s s
 takeCharsWhile1 pred = Format{
@@ -143,34 +207,49 @@ takeCharsWhile1 pred = Format{
    }
 
 -- | A fixed expected value serialized through the agument format
+--
+-- >>> testParse (value char 'a') "bcd"
+-- Left "a different value"
+-- >>> testParse (value char 'a') "abc"
+-- Right [((),"bc")]
 value f v = Format{
    parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected "a different value"),
    serialize = \()-> serialize f v
    }
 
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead
+--
+-- >>> testParse (mapSerialized ByteString.unpack ByteString.pack byte) [1,2,3]
+-- Right [(1,[2,3])]
 mapSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
                   s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
                  (s -> t) -> (t -> s) -> Format (m s) n s a -> Format (m t) n t a
 mapSerialized f f' format = Format{
-   parse = mapParserInput f f' (parse format),
+   parse = Input.mapParserInput f f' (parse format),
    serialize = (f <$>) . serialize format}
 
--- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead.
+-- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead. The argument
+-- functions may return @Nothing@ to indicate they have insuficient input to perform the conversion.
 mapMaybeSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
                        s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
                       (s -> Maybe t) -> (t -> Maybe s) -> Format (m s) n s a -> Format (m t) n t a
 mapMaybeSerialized f f' format = Format{
-   parse = mapMaybeParserInput f f' (parse format),
+   parse = Input.mapMaybeParserInput f f' (parse format),
    serialize = (fromMaybe (error "Partial serialization") . f <$>) . serialize format}
 
--- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead
+-- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead.
+--
+-- >>> testParse (mapValue (read @Int) show $ takeCharsWhile1 isDigit) "012 34"
+-- Right [(12," 34")]
+-- >>> testSerialize (mapValue read show $ takeCharsWhile1 isDigit) 12
+-- Right "12"
 mapValue :: Functor m => (a -> b) -> (b -> a) -> Format m n s a -> Format m n s b
 mapValue f f' format = Format{
    parse = f <$> parse format,
    serialize = serialize format . f'}
 
--- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead
+-- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead. The argument
+-- functions may signal conversion failure by returning @Nothing@.
 mapMaybeValue :: (Monad m, Parser.Parsing m, Alternative n) =>
                  (a -> Maybe b) -> (b -> Maybe a) -> Format m n s a -> Format m n s b
 mapMaybeValue f f' format = Format{
@@ -178,33 +257,54 @@ mapMaybeValue f f' format = Format{
    serialize = maybe Applicative.empty (serialize format) . f'}
 
 -- | A trivial format for a single byte in a 'ByteString'
+--
+-- >>> testParse byte (ByteString.pack [1,2,3])
+-- Right [(1,"\STX\ETX")]
 byte = Format{
-   parse = ByteString.head <$> anyToken,
+   parse = ByteString.head <$> Input.anyToken,
    serialize = pure . ByteString.singleton}
 
 -- | A trivial format for a single character
+--
+-- >>> testParse char "abc"
+-- Right [('a',"bc")]
 char = Format{
    parse = Parser.Char.anyChar,
    serialize = pure . fromString . (:[])}
 
 -- | A quick way to format a value that already has an appropriate 'Serialize' instance
+--
+-- >>> testParse (cereal @Word16) (ByteString.pack [1,2,3])
+-- Right [(258,"\ETX")]
+-- >>> testSerialize cereal (1025 :: Word16)
+-- Right "\EOT\SOH"
 cereal = cereal' Serialize.get Serialize.put
 
 -- | Specifying a formatter explicitly using the cereal getter and putter
+--
+-- >>> testParse (cereal' getWord16le putWord16le) (ByteString.pack [1,2,3])
+-- Right [(513,"\ETX")]
 cereal' get put = Format p (pure . runPut . put)
    where p = go (runGetPartial get mempty)
             where go (Fail msg _) = fail msg
                   go (Done r _) = pure r
-                  go (Partial cont) = anyToken >>= go . cont
+                  go (Partial cont) = Input.anyToken >>= go . cont
 
 -- | Repeats the argument format the given number of times.
+--
+-- >>> testParse (count 4 byte) (ByteString.pack [1,2,3,4,5])
+-- Right [([1,2,3,4],"\ENQ")]
+-- >>> testSerialize (count 4 byte) [1,2,3,4,5]
+-- Left ""
+-- >>> testSerialize (count 4 byte) [1,2,3,4]
+-- Right "\SOH\STX\ETX\EOT"
 count n item = Format{
    parse = Parser.count (fromIntegral n) (parse item),
-   serialize = foldMap (serialize item)}
+   serialize = \as-> if length as == n then mconcat <$> traverse (serialize item) as else Applicative.empty}
 
 -- | Converts a record of field formats into a single format of the whole record.
 record formats = Format{
-   parse = fixSequence (parse Rank2.<$> formats),
+   parse = Input.fixSequence (parse Rank2.<$> formats),
    serialize = Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
    }
    where serializeField format xs = Functor.Const (foldMap (serialize format) xs)
@@ -240,6 +340,7 @@ optional f = Format{
    serialize = maybe mempty (serialize f)}
 
 -- | Like 'optional' except with arbitrary default serialization for the @Nothing@ value.
+--
 -- > optional = optionWithDefault (literal mempty)
 optionWithDefault :: (Alternative m, Alternative n, Monoid (n s)) =>
                      Format m n s () -> Format m n s a -> Format m n s (Maybe a)
@@ -261,3 +362,12 @@ empty = Format{
 mfix f = Format{
    parse = Monad.Fix.mfix (parse . f),
    serialize = \a-> serialize (f a) a}
+
+-- | Attempts to 'parse' the given input with the format with a constrained type, returns either a failure message or
+-- a list of successes.
+testParse :: Monoid s => Format (Incremental.Parser Symmetric s) (Either String) s a -> s -> Either String [(a, s)]
+testParse format input = fst <$> Incremental.inspect (Incremental.feedEof $ Incremental.feed input $ parse format)
+
+-- | A less polymorphic wrapper around 'serialize' useful for testing
+testSerialize :: Format (Incremental.Parser Symmetric s) (Either String) s a -> a -> Either String s
+testSerialize = serialize

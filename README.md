@@ -37,7 +37,7 @@ data BitMap f = BitMap{
 deriving instance Show (BitMap Identity)
 $(Rank2.TH.deriveAll ''BitMap)
 
-format :: Format (Parser ByteString) Identity ByteString (BitMap Identity)
+format :: Format (Parser ByteString) Maybe ByteString (BitMap Identity)
 format = literal (ASCII.pack "BMP") *> mfix (\this-> record
   BitMap{
         width= byte,
@@ -59,7 +59,7 @@ serialize the in-memory record form into the binary form:
 
 ~~~ {.haskell}
 -- | >>> serialize format BitMap{width= Identity 3, height= Identity 2, pixels= Identity [[7,8,9], [11,12,13]]}
--- Identity "BMP\ETX\STX\a\b\t\v\f\r"
+-- Just "BMP\ETX\STX\a\b\t\v\f\r"
 ~~~
 
 and to parse the serialized binary form back into the record structure:
