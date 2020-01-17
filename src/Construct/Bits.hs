@@ -8,8 +8,7 @@ module Construct.Bits
    -- * The combinators for converting between 'Bits' and 'ByteString' input streams
    bigEndianBitsOf, bigEndianBytesOf, littleEndianBitsOf, littleEndianBytesOf) where
 
-import Data.Bits (clearBit, setBit, testBit)
-import Data.Bool (bool)
+import Data.Bits (setBit, testBit)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.List as List

@@ -26,25 +26,19 @@ import qualified Control.Monad.Fix as Monad.Fix
 import Control.Applicative (Applicative, Alternative)
 import Control.Monad.Fix (MonadFix)
 import Data.Functor ((<$>), void)
-import Data.Functor.Identity
 import qualified Data.Functor.Const as Functor
-import Data.Kind (Constraint, Type)
 import Data.Maybe (fromMaybe)
-import Data.Word (Word, Word8)
+import Data.Word (Word8)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as ASCII
 import qualified Data.Monoid.Factorial as Factorial
 import qualified Data.Monoid.Textual as Textual
 import qualified Data.Monoid.Null as Null
 import Data.Monoid.Factorial (FactorialMonoid)
 import Data.Monoid.Textual (TextualMonoid)
-import Data.Semigroup.Cancellative (LeftReductive)
 import Data.String (IsString, fromString)
 import qualified Text.Parser.Combinators as Parser
 import qualified Text.Parser.Char as Parser.Char
-import qualified Text.ParserCombinators.Incremental as Incremental
-import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser, LeftBiasedLocal)
 import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
 import qualified Data.Serialize as Serialize
 
@@ -53,6 +47,8 @@ import qualified Rank2
 import qualified Construct.Classes as Input
 import Construct.Classes
 import Construct.Internal
+
+import Prelude hiding (pred)
 
 (<$)     :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 (*>)     :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
