@@ -61,26 +61,7 @@ import Prelude hiding (pred, take, takeWhile)
 -- >>> import Data.Word (Word16)
 -- >>> import Numeric (showInt)
 
-(<$)     :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
-(*>)     :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
-(<*)     :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
-(<|>)    :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
-optional :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s (Maybe a)
-many     :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s [a]
-pair     :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
-empty    :: (Alternative m, Alternative n) => Format m n s a
-mfix     :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal  :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
-value    :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
-byte     :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
-char     :: (Parser.Char.CharParsing m, ParserInput m ~ s, IsString s, Applicative n) => Format m n s Char
-cereal   :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString a
-cereal'  :: (Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) =>
-            Get a -> Putter a -> Format m n ByteString a
-count    :: (Applicative m, Alternative n, Monoid s) => Int -> Format m n s a -> Format m n s [a]
-record   :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s), Applicative o, Foldable o) =>
-            g (Format m n s) -> Format m n s (g o)
-
 -- | A literal serialized form, such as a magic constant, corresponding to no value
 --
 -- >>> testParse (literal "Hi") "Hi there"
@@ -207,6 +188,7 @@ takeCharsWhile1 pred = Format{
                     else Applicative.empty
    }
 
+value :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
 -- | A fixed expected value serialized through the agument format
 --
 -- >>> testParse (value char 'a') "bcd"
@@ -257,6 +239,7 @@ mapMaybeValue f f' format = Format{
    parse = parse format >>= maybe (Parser.unexpected "unmappable parsed value") pure . f,
    serialize = maybe Applicative.empty (serialize format) . f'}
 
+byte :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
 -- | A trivial format for a single byte in a 'ByteString'
 --
 -- >>> testParse byte (ByteString.pack [1,2,3])
@@ -265,6 +248,7 @@ byte = Format{
    parse = ByteString.head <$> Input.anyToken,
    serialize = pure . ByteString.singleton}
 
+char     :: (Parser.Char.CharParsing m, ParserInput m ~ s, IsString s, Applicative n) => Format m n s Char
 -- | A trivial format for a single character
 --
 -- >>> testParse char "abc"
@@ -273,6 +257,7 @@ char = Format{
    parse = Parser.Char.anyChar,
    serialize = pure . fromString . (:[])}
 
+cereal :: (Serialize a, Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString a
 -- | A quick way to format a value that already has an appropriate 'Serialize' instance
 --
 -- >>> testParse (cereal @Word16) (ByteString.pack [1,2,3])
@@ -281,6 +266,8 @@ char = Format{
 -- Right "\EOT\SOH"
 cereal = cereal' Serialize.get Serialize.put
 
+cereal' :: (Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) =>
+            Get a -> Putter a -> Format m n ByteString a
 -- | Specifying a formatter explicitly using the cereal getter and putter
 --
 -- >>> testParse (cereal' getWord16le putWord16le) (ByteString.pack [1,2,3])
@@ -291,6 +278,7 @@ cereal' get put = Format p (pure . runPut . put)
                   go (Done r _) = pure r
                   go (Partial cont) = Input.anyToken >>= go . cont
 
+count :: (Applicative m, Alternative n, Monoid s) => Int -> Format m n s a -> Format m n s [a]
 -- | Repeats the argument format the given number of times.
 --
 -- >>> testParse (count 4 byte) (ByteString.pack [1,2,3,4,5])
@@ -303,6 +291,8 @@ count n item = Format{
    parse = Parser.count (fromIntegral n) (parse item),
    serialize = \as-> if length as == n then mconcat <$> traverse (serialize item) as else Applicative.empty}
 
+record :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s), Applicative o, Foldable o) =>
+          g (Format m n s) -> Format m n s (g o)
 -- | Converts a record of field formats into a single format of the whole record.
 record formats = Format{
    parse = Input.fixSequence (parse Rank2.<$> formats),
@@ -315,26 +305,31 @@ infixl 4 <$
 infixl 4 <*
 infixl 4 *>
 
+(<$) :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
 -- | Same as the usual 'Data.Functor.<$' except a 'Format' is no 'Functor'.
 a <$ f = Format{
    parse = a Applicative.<$ parse f,
    serialize = \b-> if a == b then serialize f () else Applicative.empty}
 
+(*>) :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
 -- | Same as the usual 'Applicative.*>' except a 'Format' is no 'Functor', let alone 'Applicative'.
 f1 *> f2 = Format{
    parse = parse f1 Applicative.*> parse f2,
    serialize = \a-> serialize f1 () <> serialize f2 a}
 
+(<*) :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
 -- | Same as the usual 'Applicative.<*' except a 'Format' is no 'Functor', let alone 'Applicative'.
 f1 <* f2 = Format{
    parse = parse f1 Applicative.<* parse f2,
    serialize = \a-> serialize f1 a <> serialize f2 ()}
 
+(<|>) :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
 -- | Same as the usual 'Applicative.<|>' except a 'Format' is no 'Functor', let alone 'Alternative'.
 f1 <|> f2 = Format{
    parse = parse f1 Applicative.<|> parse f2,
    serialize = \a-> serialize f1 a Applicative.<|> serialize f2 a}
 
+optional :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s (Maybe a)
 -- | Same as the usual 'Applicative.optional' except a 'Format' is no 'Functor', let alone 'Alternative'.
 optional f = Format{
    parse = Applicative.optional (parse f),
@@ -349,11 +344,13 @@ optionWithDefault d f = Format{
    parse = Just <$> parse f Applicative.<|> Nothing Applicative.<$ parse d,
    serialize = maybe (serialize d ()) (serialize f)}
 
+many :: (Alternative m, Monoid (n s)) => Format m n s a -> Format m n s [a]
 -- | Same as the usual 'Applicative.many' except a 'Format' is no 'Functor', let alone 'Alternative'.
 many f = Format{
    parse = Applicative.many (parse f),
    serialize = foldMap (serialize f)}
 
+pair :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
 -- | Combines two formats into a format for the pair of their values.
 --
 -- >>> testParse (pair char char) "abc"
@@ -362,11 +359,13 @@ pair f g = Format{
    parse = (,) <$> parse f <*> parse g,
    serialize = \(a, b)-> serialize f a <> serialize g b}
 
+empty :: (Alternative m, Alternative n) => Format m n s a
 -- | Same as the usual 'Applicative.empty' except a 'Format' is no 'Functor', let alone 'Alternative'.
 empty = Format{
    parse = Applicative.empty,
    serialize = const Applicative.empty}
 
+mfix :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 -- | Same as the usual 'Control.Monad.Fix.mfix' except a 'Format' is no 'Functor', let alone 'Monad'.
 mfix f = Format{
    parse = Monad.Fix.mfix (parse . f),
