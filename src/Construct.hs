@@ -6,7 +6,7 @@ module Construct
   Format, parse, serialize,
 
   -- * Combinators
-  (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>),
+  (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>), (<?>),
   empty, optional, optionWithDefault, pair, deppair, many, some, count,
   -- ** Self-referential record support
   mfix, record,
@@ -51,7 +51,8 @@ import qualified Data.Serialize as Serialize
 import qualified Rank2
 
 import qualified Construct.Classes as Input
-import Construct.Classes (InputParsing (ParserInput), InputCharParsing, InputMappableParsing, FixTraversable)
+import Construct.Classes (AlternativeFail(failure), InputParsing (ParserInput), InputCharParsing, InputMappableParsing,
+                          FixTraversable, Error, errorString, expectedName)
 import Construct.Internal
 
 import Prelude hiding (pred, take, takeWhile)
@@ -91,16 +92,18 @@ padded template format = Format{
 
 -- | Modifies the serialized form of the given format by padding it with the given template. The serialized form has
 -- to be shorter than the template before padding.
-padded1 :: (Monad m, Monad n, InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) =>
+padded1 :: (Monad m, Monad n, InputParsing m, ParserInput m ~ s, FactorialMonoid s, Show s, AlternativeFail n) =>
            s -> Format m n s s -> Format m n s s
 padded1 template format = Format{
    parse = parse format >>= parsePadding,
    serialize = \a-> serialize format a >>= padRight
    }
-   where padRight s = if Null.null padding then Applicative.empty else pure (s <> padding)
+   where padRight s = if Null.null padding then expectedName ("padded1 " ++ show template) (failure $ show s)
+                      else pure (s <> padding)
             where padding = Factorial.drop (Factorial.length s) template
-         parsePadding s = if Null.null padding then Parser.unexpected "overlong format to pad"
-                            else s Applicative.<$ Input.string padding
+         parsePadding s = if Null.null padding
+                          then Parser.unexpected (show s) Parser.<?> ("padded1 " ++ show template)
+                          else s Applicative.<$ Input.string padding
             where padding = Factorial.drop (Factorial.length s) template
 
 -- | Format whose in-memory value is a fixed-size prefix of the serialized value
@@ -110,11 +113,12 @@ padded1 template format = Format{
 -- >>> testSerialize (take 3) "123"
 -- Right "123"
 -- >>> testSerialize (take 3) "1234"
--- Left ""
-take :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => Int -> Format m n s s
+-- Left "expected a value of length 3, encountered \"1234\""
+take :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Show s, AlternativeFail n) => Int -> Format m n s s
 take n = Format{
    parse = Input.take n,
-   serialize = \s-> if Factorial.length s == n then pure s else Applicative.empty
+   serialize = \s-> if Factorial.length s == n then pure s
+                    else expectedName ("a value of length " ++ show n) (failure $ show s)
    }
 
 -- | Format whose in-memory value is the longest prefix of the serialized value smallest parts of which all satisfy
@@ -125,15 +129,17 @@ take n = Format{
 -- >>> testParse (takeWhile (> "b")) "dcba"
 -- Right [("dc","ba")]
 -- >>> testSerialize (takeWhile (> "b")) "dcba"
--- Left ""
+-- Left "expected takeWhile, encountered \"dcba\""
 -- >>> testSerialize (takeWhile (> "b")) "dc"
 -- Right "dc"
 -- >>> testSerialize (takeWhile (> "b")) ""
 -- Right ""
-takeWhile :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => (s -> Bool) -> Format m n s s
+takeWhile :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Show s, AlternativeFail n) =>
+             (s -> Bool) -> Format m n s s
 takeWhile pred = Format{
    parse = Input.takeWhile pred,
-   serialize = \s-> if Null.null s || Null.null (Factorial.dropWhile pred s) then pure s else Applicative.empty
+   serialize = \s-> if Null.null (Factorial.dropWhile pred s) then pure s
+                    else expectedName "takeWhile" (failure $ show s)
    }
 
 -- | Format whose in-memory value is the longest non-empty prefix of the serialized value smallest parts of which all
@@ -142,13 +148,15 @@ takeWhile pred = Format{
 -- >>> testParse (takeWhile1 (> "b")) "abcd"
 -- Left "takeWhile1"
 -- >>> testSerialize (takeWhile1 (> "b")) ""
--- Left ""
+-- Left "expected takeWhile1, encountered \"\""
 -- >>> testSerialize (takeWhile1 (> "b")) "dc"
 -- Right "dc"
-takeWhile1 :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Alternative n) => (s -> Bool) -> Format m n s s
+takeWhile1 :: (InputParsing m, ParserInput m ~ s, FactorialMonoid s, Show s, AlternativeFail n) =>
+              (s -> Bool) -> Format m n s s
 takeWhile1 pred = Format{
    parse = Input.takeWhile1 pred,
-   serialize = \s-> if not (Null.null s) && Null.null (Factorial.dropWhile pred s) then pure s else Applicative.empty
+   serialize = \s-> if not (Null.null s) && Null.null (Factorial.dropWhile pred s) then pure s
+                    else expectedName "takeWhile1" (failure $ show s)
    }
 
 -- | Format whose in-memory value is the longest prefix of the serialized value that consists of characters which all
@@ -159,59 +167,60 @@ takeWhile1 pred = Format{
 -- >>> testParse (takeCharsWhile isDigit) "12a"
 -- Right [("12","a")]
 -- >>> testSerialize (takeCharsWhile isDigit) "12a"
--- Left ""
+-- Left "expected takeCharsWhile, encountered \"12a\""
 -- >>> testSerialize (takeCharsWhile isDigit) "12"
 -- Right "12"
 -- >>> testSerialize (takeCharsWhile isDigit) ""
 -- Right ""
-takeCharsWhile :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Alternative n) =>
+takeCharsWhile :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Show s, AlternativeFail n) =>
                   (Char -> Bool) -> Format m n s s
 takeCharsWhile pred = Format{
    parse = Input.takeCharsWhile pred,
-   serialize = \s-> if Null.null s || Null.null (Textual.dropWhile_ False pred s) then pure s else Applicative.empty
+   serialize = \s-> if Null.null (Textual.dropWhile_ False pred s) then pure s
+                    else expectedName "takeCharsWhile" (failure $ show s)
    }
 
 -- | Format whose in-memory value is the longest non-empty prefix of the serialized value that consists of characters
 -- which all satisfy the given predicate.
 --
 -- >>> testParse (takeCharsWhile1 isDigit) "a12"
--- Left "takeCharsWhile1"
+-- Left "takeCharsWhile1 encountered 'a'"
 -- >>> testParse (takeCharsWhile1 isDigit) "12a"
 -- Right [("12","a")]
 -- >>> testSerialize (takeCharsWhile1 isDigit) "12"
 -- Right "12"
 -- >>> testSerialize (takeCharsWhile1 isDigit) ""
--- Left ""
-takeCharsWhile1 :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Alternative n) =>
+-- Left "expected takeCharsWhile1, encountered \"\""
+takeCharsWhile1 :: (InputCharParsing m, ParserInput m ~ s, TextualMonoid s, Show s, AlternativeFail n) =>
                    (Char -> Bool) -> Format m n s s
 takeCharsWhile1 pred = Format{
    parse = Input.takeCharsWhile1 pred,
    serialize = \s-> if not (Null.null s) && Null.null (Textual.dropWhile_ False pred s) then pure s
-                    else Applicative.empty
+                    else expectedName "takeCharsWhile1" (failure $ show s)
    }
 
-value :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
+value :: (Eq a, Show a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
 -- | A fixed expected value serialized through the argument format
 --
 -- >>> testParse (value char 'a') "bcd"
--- Left "a different value"
+-- Left "encountered 'b'"
 -- >>> testParse (value char 'a') "abc"
 -- Right [((),"bc")]
 value f v = Format{
-   parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected "a different value"),
+   parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected (show x)),
    serialize = \()-> serialize f v
    }
 
-satisfy :: (Parser.Parsing m, Monad m, Alternative n) => (a -> Bool) -> Format m n s a -> Format m n s a
+satisfy :: (Parser.Parsing m, Monad m, AlternativeFail n, Show a) => (a -> Bool) -> Format m n s a -> Format m n s a
 -- | Filter the argument format so it only succeeds for values that pass the predicate.
 --
 -- >>> testParse (satisfy isDigit char) "abc"
--- Left "a satisfactory value"
+-- Left "encountered 'a'"
 -- >>> testParse (satisfy isLetter char) "abc"
 -- Right [('a',"bc")]
 satisfy predicate f = Format{
-   parse = parse f >>= \v-> if predicate v then pure v else Parser.unexpected "a satisfactory value",
-   serialize = \v-> if predicate v then serialize f v else Applicative.empty
+   parse = parse f >>= \v-> if predicate v then pure v else Parser.unexpected (show v),
+   serialize = \v-> if predicate v then serialize f v else expectedName "satisfy" (failure $ show v)
    }
 
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead
@@ -247,11 +256,11 @@ mapValue f f' format = Format{
 
 -- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead. The argument
 -- functions may signal conversion failure by returning @Nothing@.
-mapMaybeValue :: (Monad m, Parser.Parsing m, Alternative n) =>
+mapMaybeValue :: (Monad m, Parser.Parsing m, Show a, Show b, AlternativeFail n) =>
                  (a -> Maybe b) -> (b -> Maybe a) -> Format m n s a -> Format m n s b
 mapMaybeValue f f' format = Format{
-   parse = parse format >>= maybe (Parser.unexpected "unmappable parsed value") pure . f,
-   serialize = maybe Applicative.empty (serialize format) . f'}
+   parse = parse format >>= \v-> maybe (Parser.unexpected $ show v) pure (f v),
+   serialize = \v-> maybe (expectedName "mapMaybeValue" (failure $ show v)) (serialize format) (f' v)}
 
 byte :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
 -- | A trivial format for a single byte in a 'ByteString'
@@ -292,18 +301,19 @@ cereal' get put = Format p (pure . runPut . put)
                   go (Done r _) = pure r
                   go (Partial cont) = Input.anyToken >>= go . cont
 
-count :: (Applicative m, Alternative n, Monoid s) => Int -> Format m n s a -> Format m n s [a]
+count :: (Applicative m, AlternativeFail n, Show a, Monoid s) => Int -> Format m n s a -> Format m n s [a]
 -- | Repeats the argument format the given number of times.
 --
 -- >>> testParse (count 4 byte) (ByteString.pack [1,2,3,4,5])
 -- Right [([1,2,3,4],"\ENQ")]
 -- >>> testSerialize (count 4 byte) [1,2,3,4,5]
--- Left ""
+-- Left "expected a list of length 4, encountered [1,2,3,4,5]"
 -- >>> testSerialize (count 4 byte) [1,2,3,4]
 -- Right "\SOH\STX\ETX\EOT"
 count n item = Format{
    parse = Parser.count (fromIntegral n) (parse item),
-   serialize = \as-> if length as == n then mconcat <$> traverse (serialize item) as else Applicative.empty}
+   serialize = \as-> if length as == n then mconcat <$> traverse (serialize item) as
+                     else expectedName ("a list of length " ++ show n) (failure $ show as)}
 
 record :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s), Applicative o, Foldable o) =>
           g (Format m n s) -> Format m n s (g o)
@@ -319,11 +329,11 @@ infixl 4 <$
 infixl 4 <*
 infixl 4 *>
 
-(<$) :: (Eq a, Functor m, Alternative n) => a -> Format m n s () -> Format m n s a
+(<$) :: (Eq a, Show a, Functor m, AlternativeFail n) => a -> Format m n s () -> Format m n s a
 -- | Same as the usual 'Data.Functor.<$' except a 'Format' is no 'Functor'.
 a <$ f = Format{
    parse = a Applicative.<$ parse f,
-   serialize = \b-> if a == b then serialize f () else Applicative.empty}
+   serialize = \b-> if a == b then serialize f () else expectedName (show a) (failure $ show b)}
 
 (*>) :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
 -- | Same as the usual 'Applicative.*>' except a 'Format' is no 'Functor', let alone 'Applicative'.
@@ -364,11 +374,11 @@ many f = Format{
    parse = Applicative.many (parse f),
    serialize = foldMap (serialize f)}
 
-some :: (Alternative m, Alternative n, Semigroup (n s)) => Format m n s a -> Format m n s [a]
+some :: (Alternative m, AlternativeFail n, Semigroup (n s)) => Format m n s a -> Format m n s [a]
 -- | Same as the usual 'Applicative.some' except a 'Format' is no 'Functor', let alone 'Alternative'.
 some f = Format{
    parse = Applicative.some (parse f),
-   serialize = maybe Applicative.empty sconcat . nonEmpty . map (serialize f)}
+   serialize = maybe (failure "[]") sconcat . nonEmpty . map (serialize f)}
 
 pair :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
 -- | Combines two formats into a format for the pair of their values.
@@ -384,7 +394,7 @@ deppair :: (Monad m, Semigroup (n s)) => Format m n s a -> (a -> Format m n s b)
 -- values.  Similar to '>>=' except 'Format' is no 'Functor' let alone 'Monad'.
 --
 -- >>> testParse (deppair char (\c-> satisfy (==c) char)) "abc"
--- Left "a satisfactory value"
+-- Left "encountered 'b'"
 -- >>> testParse (deppair char (\c-> satisfy (==c) char)) "aac"
 -- Right [(('a','a'),"c")]
 deppair f g = Format{
@@ -397,6 +407,18 @@ empty = Format{
    parse = Applicative.empty,
    serialize = const Applicative.empty}
 
+infixr 0 <?>
+(<?>) :: (Parser.Parsing m, AlternativeFail n) => Format m n s a -> String -> Format m n s a
+-- | Name a format to improve error messages.
+--
+-- >>> testParse (takeCharsWhile1 isDigit <?> "a number") "abc"
+-- Left "expected a number, encountered 'a'"
+-- >>> testSerialize (takeCharsWhile1 isDigit <?> "a number") "abc"
+-- Left "expected a number, encountered \"abc\""
+f <?> name = Format{
+   parse = parse f Parser.<?> name,
+   serialize = expectedName name . serialize f}
+
 mfix :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 -- | Same as the usual 'Control.Monad.Fix.mfix' except a 'Format' is no 'Functor', let alone 'Monad'.
 mfix f = Format{
@@ -405,9 +427,9 @@ mfix f = Format{
 
 -- | Attempts to 'parse' the given input with the format with a constrained type, returns either a failure message or
 -- a list of successes.
-testParse :: Monoid s => Format (Incremental.Parser Symmetric s) (Either String) s a -> s -> Either String [(a, s)]
+testParse :: Monoid s => Format (Incremental.Parser Symmetric s) (Either Error) s a -> s -> Either String [(a, s)]
 testParse format input = fst <$> Incremental.inspect (Incremental.feedEof $ Incremental.feed input $ parse format)
 
 -- | A less polymorphic wrapper around 'serialize' useful for testing
-testSerialize :: Format (Incremental.Parser Symmetric s) (Either String) s a -> a -> Either String s
-testSerialize = serialize
+testSerialize :: Format (Incremental.Parser Symmetric s) (Either Error) s a -> a -> Either String s
+testSerialize format = either (Left . errorString) Right . serialize format

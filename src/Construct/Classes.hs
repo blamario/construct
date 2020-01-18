@@ -9,7 +9,7 @@ import Control.Monad.Fix (MonadFix)
 import qualified Rank2
 import qualified Text.ParserCombinators.Incremental as Incremental
 
-import Control.Applicative (Alternative ((<|>)))
+import Control.Applicative (Alternative ((<|>), empty))
 import Control.Monad (void)
 import Data.String (IsString (fromString))
 import Text.ParserCombinators.ReadP (ReadP)
@@ -39,6 +39,17 @@ import qualified Data.Attoparsec.ByteString.Char8 as Attoparsec.Char8
 import qualified Data.Attoparsec.Text as Attoparsec.Text
 
 import Prelude hiding (take, takeWhile)
+
+-- | Subclass of 'Alternative' that carries an error message in case of failure
+class Alternative m => AlternativeFail m where
+   -- | Equivalent to 'empty' except it takes an error message it may carry or drop on the floor. The grammatical form
+   --  of the argument be a noun representing the unexpected value.
+   failure :: String -> m a
+   -- | Sets or modifies the expected value.
+   expectedName :: String -> m a -> m a
+
+   failure = const empty
+   expectedName = const id
 
 -- | Methods for parsing factorial monoid inputs
 class LookAheadParsing m => InputParsing m where
@@ -107,7 +118,6 @@ class LookAheadParsing m => InputParsing m where
                              if Null.null x then unexpected "takeWhile1" else pure x
    {-# INLINE concatMany #-}
 
-
 -- | Methods for parsing textual monoid inputs
 class (CharParsing m, InputParsing m) => InputCharParsing m where
    -- | Specialization of 'satisfy' on textual inputs, accepting an input character only if it satisfies the given
@@ -171,6 +181,42 @@ class MonadFix m => FixTraversable m where
 ------------------------------------------------------------
 --                       Instances
 ------------------------------------------------------------
+
+data Error = Error [String] (Maybe String) deriving (Eq, Show)
+
+instance Semigroup Error where
+   Error expected1 encountered1 <> Error expected2 encountered2 =
+      Error (expected1 <> expected2) (maybe encountered2 Just encountered1)
+
+instance AlternativeFail Maybe
+
+instance AlternativeFail []
+
+instance {-# OVERLAPS #-} Alternative (Either Error) where
+   empty = Left (Error [] Nothing)
+   Right a <|> _ = Right a
+   _ <|> Right a = Right a
+   Left e1 <|> Left e2 = Left (e1 <> e2)
+
+instance AlternativeFail (Either Error) where
+   failure encountered = Left (Error [] (Just encountered))
+   expectedName expected (Left (Error _ encountered)) = Left (Error [expected] encountered)
+   expectedName _ success = success
+
+errorString :: Error -> String
+errorString (Error ex Nothing) = maybe "" ("expected " <>) (concatExpected ex)
+errorString (Error [] (Just en)) = "encountered " <> en
+errorString (Error ex (Just en)) = maybe "" ("expected " <>) (concatExpected ex) <> ", encountered " <> en
+
+concatExpected :: [String] -> Maybe String
+concatExpected [] = Nothing
+concatExpected [e] = Just e
+concatExpected [e1, e2] = Just (e1 <> " or " <> e2)
+concatExpected (e:es) = Just (oxfordComma e es)
+
+oxfordComma :: String -> [String] -> String
+oxfordComma e [] = "or " <> e
+oxfordComma e (e':es) = e <> ", " <> oxfordComma e' es
 
 instance InputParsing ReadP where
    type ParserInput ReadP = String

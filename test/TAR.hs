@@ -63,6 +63,7 @@ data UStarHeader f = UStarHeader{
 deriving instance Show (Archive Identity)
 deriving instance Show (File Identity)
 deriving instance Show (FileHeader () Identity)
+deriving instance Show (FileHeader Word32 Identity)
 deriving instance Show (UStarHeader Identity)
 
 archive :: Format (Parser ByteString) Maybe ByteString (Archive Identity)
