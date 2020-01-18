@@ -7,7 +7,7 @@ module Construct
 
   -- * Combinators
   (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>),
-  empty, optional, optionWithDefault, many, count,
+  empty, optional, optionWithDefault, pair, many, count,
   -- ** Self-referential record support
   mfix, record,
   -- ** Mapping over a 'Format'
@@ -67,6 +67,7 @@ import Prelude hiding (pred, take, takeWhile)
 (<|>)    :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
 optional :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s (Maybe a)
 many     :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s [a]
+pair     :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
 empty    :: (Alternative m, Alternative n) => Format m n s a
 mfix     :: MonadFix m => (a -> Format m n s a) -> Format m n s a
 literal  :: (Functor m, InputParsing m, Applicative n, ParserInput m ~ s) => s -> Format m n s ()
@@ -352,6 +353,14 @@ optionWithDefault d f = Format{
 many f = Format{
    parse = Applicative.many (parse f),
    serialize = foldMap (serialize f)}
+
+-- | Combines two formats into a format for the pair of their values.
+--
+-- >>> testParse (pair char char) "abc"
+-- Right [(('a','b'),"c")]
+pair f g = Format{
+   parse = (,) <$> parse f <*> parse g,
+   serialize = \(a, b)-> serialize f a <> serialize g b}
 
 -- | Same as the usual 'Applicative.empty' except a 'Format' is no 'Functor', let alone 'Alternative'.
 empty = Format{

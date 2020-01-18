@@ -2,6 +2,9 @@
 
 -- | This module exports the primitives and combinators for constructing formats with sub- or cross-byte
 -- components. See @test/MBR.hs@ for an example of its use.
+--
+-- >>> testParse (bigEndianBytesOf $ pair (count 5 bit) (count 3 bit)) (ByteString.pack [9])
+-- Right [(([False,False,False,False,True],[False,False,True]),"")]
 
 module Construct.Bits
   (Bits, bit,
