@@ -7,13 +7,13 @@ module Construct
 
   -- * Combinators
   (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>),
-  empty, optional, optionWithDefault, pair, many, count,
+  empty, optional, optionWithDefault, pair, deppair, many, some, count,
   -- ** Self-referential record support
   mfix, record,
   -- ** Mapping over a 'Format'
   mapSerialized, mapMaybeSerialized, mapValue, mapMaybeValue,
   -- ** Constraining a 'Format'
-  value, padded, padded1,
+  satisfy, value, padded, padded1,
 
   -- * Primitives
   literal, byte, char,
@@ -29,7 +29,9 @@ import Control.Applicative (Applicative, Alternative)
 import Control.Monad.Fix (MonadFix)
 import Data.Functor ((<$>), void)
 import qualified Data.Functor.Const as Functor
+import Data.List.NonEmpty (nonEmpty)
 import Data.Maybe (fromMaybe)
+import Data.Semigroup (Semigroup, (<>), sconcat)
 import Data.Word (Word8)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
@@ -55,7 +57,7 @@ import Construct.Internal
 import Prelude hiding (pred, take, takeWhile)
 
 -- $setup
--- >>> import Data.Char (isDigit)
+-- >>> import Data.Char (isDigit, isLetter)
 -- >>> import Data.Serialize.Get (getWord16le)
 -- >>> import Data.Serialize.Put (putWord16le)
 -- >>> import Data.Word (Word16)
@@ -189,7 +191,7 @@ takeCharsWhile1 pred = Format{
    }
 
 value :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a -> Format m n s ()
--- | A fixed expected value serialized through the agument format
+-- | A fixed expected value serialized through the argument format
 --
 -- >>> testParse (value char 'a') "bcd"
 -- Left "a different value"
@@ -198,6 +200,18 @@ value :: (Eq a, Parser.Parsing m, Monad m, Alternative n) => Format m n s a -> a
 value f v = Format{
    parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected "a different value"),
    serialize = \()-> serialize f v
+   }
+
+satisfy :: (Parser.Parsing m, Monad m, Alternative n) => (a -> Bool) -> Format m n s a -> Format m n s a
+-- | Filter the argument format so it only succeeds for values that pass the predicate.
+--
+-- >>> testParse (satisfy isDigit char) "abc"
+-- Left "a satisfactory value"
+-- >>> testParse (satisfy isLetter char) "abc"
+-- Right [('a',"bc")]
+satisfy predicate f = Format{
+   parse = parse f >>= \v-> if predicate v then pure v else Parser.unexpected "a satisfactory value",
+   serialize = \v-> if predicate v then serialize f v else Applicative.empty
    }
 
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead
@@ -350,6 +364,12 @@ many f = Format{
    parse = Applicative.many (parse f),
    serialize = foldMap (serialize f)}
 
+some :: (Alternative m, Alternative n, Semigroup (n s)) => Format m n s a -> Format m n s [a]
+-- | Same as the usual 'Applicative.some' except a 'Format' is no 'Functor', let alone 'Alternative'.
+some f = Format{
+   parse = Applicative.some (parse f),
+   serialize = maybe Applicative.empty sconcat . nonEmpty . map (serialize f)}
+
 pair :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
 -- | Combines two formats into a format for the pair of their values.
 --
@@ -358,6 +378,18 @@ pair :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> 
 pair f g = Format{
    parse = (,) <$> parse f <*> parse g,
    serialize = \(a, b)-> serialize f a <> serialize g b}
+
+deppair :: (Monad m, Semigroup (n s)) => Format m n s a -> (a -> Format m n s b) -> Format m n s (a, b)
+-- | Combines two formats, where the second format depends on the first value, into a format for the pair of their
+-- values.  Similar to '>>=' except 'Format' is no 'Functor' let alone 'Monad'.
+--
+-- >>> testParse (deppair char (\c-> satisfy (==c) char)) "abc"
+-- Left "a satisfactory value"
+-- >>> testParse (deppair char (\c-> satisfy (==c) char)) "aac"
+-- Right [(('a','a'),"c")]
+deppair f g = Format{
+   parse = parse f >>= \a-> parse (g a) >>= \b-> return (a, b),
+   serialize = \(a, b)-> serialize f a <> serialize (g a) b}
 
 empty :: (Alternative m, Alternative n) => Format m n s a
 -- | Same as the usual 'Applicative.empty' except a 'Format' is no 'Functor', let alone 'Alternative'.
