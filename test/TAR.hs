@@ -72,7 +72,8 @@ archive = record Archive{files= many file}
 file :: Format (Parser ByteString) Maybe ByteString (File Identity)
 file = mfix $ \this-> record File{
    header = fileHeader,
-   content = take (fromIntegral $ fileSize <$> header this)}
+   content = ByteString.replicate (((fromIntegral (fileSize <$> header this) + 511) `div` 512) * 512) 0 `padded`
+             take (fromIntegral $ fileSize <$> header this)}
 
 fileHeader :: Format (Parser ByteString) Maybe ByteString (FileHeader () Identity)
 fileHeader = mapMaybeValue validate calculate (record $ fileHeaderRecord (zeroDelimitedOctal 7 <* value char ' '))
@@ -112,7 +113,7 @@ ustarHeader = record UStarHeader{
    groupName = zeroDelimitedUtf8 32,
    deviceMajor = optionWithDefault (literal $ ByteString.replicate 8 0) (zeroDelimitedOctal 8),
    deviceMinor = optionWithDefault (literal $ ByteString.replicate 8 0) (zeroDelimitedOctal 8),
-   namePrefix = zeroDelimitedUtf8 155}
+   namePrefix = zeroDelimitedUtf8 167 {- 155+12 to pad to 512 -}}
 
 zeroDelimitedUtf8 :: Int -> Format (Parser ByteString) Maybe ByteString Text
 zeroDelimitedUtf8 width = mapValue decodeUtf8 encodeUtf8 $
