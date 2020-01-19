@@ -7,7 +7,7 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ASCII
 import Data.Char (isOctDigit)
 import Data.Foldable (fold)
-import Data.Functor.Identity (Identity, runIdentity)
+import Data.Functor.Identity (Identity(Identity, runIdentity))
 import Data.Monoid.Textual (TextualMonoid)
 import qualified Data.Monoid.Textual
 import Data.Text (Text)
@@ -15,7 +15,7 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Word
 import Numeric (readOct, showOct)
 import qualified Rank2.TH
-import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
+import Data.Attoparsec.ByteString (Parser)
 
 import Construct
 
@@ -66,24 +66,25 @@ deriving instance Show (FileHeader () Identity)
 deriving instance Show (FileHeader Word32 Identity)
 deriving instance Show (UStarHeader Identity)
 
-archive :: Format (Parser ByteString) Maybe ByteString (Archive Identity)
+archive :: Format Parser Maybe ByteString (Archive Identity)
 archive = record Archive{files= many file}
 
-file :: Format (Parser ByteString) Maybe ByteString (File Identity)
-file = mfix $ \this-> record File{
-   header = fileHeader,
-   content = ByteString.replicate (((fromIntegral (fileSize <$> header this) + 511) `div` 512) * 512) 0 `padded`
-             take (fromIntegral $ fileSize <$> header this)}
+file :: Format Parser Maybe ByteString (File Identity)
+file = mapValue (uncurry file) (\f-> (runIdentity $ header f, runIdentity $ content f)) $
+       deppair fileHeader (\FileHeader{fileSize= size}->
+                              ByteString.replicate (((fromIntegral size + 511) `div` 512) * 512) 0 `padded`
+                              take (fromIntegral size))
+   where file h c = File (Identity h) (Identity c)
 
-fileHeader :: Format (Parser ByteString) Maybe ByteString (FileHeader () Identity)
+fileHeader :: Format Parser Maybe ByteString (FileHeader () Identity)
 fileHeader = mapMaybeValue validate calculate (record $ fileHeaderRecord (zeroDelimitedOctal 7 <* value char ' '))
    where validate header
             | header' <- header{checksum= pure ()}, fromIntegral (checksum header) == sumOf header' = Just header'
             | otherwise = Nothing
          calculate header = Just header{checksum= pure $ sumOf header}
 
-fileHeaderRecord :: Format (Parser ByteString) Maybe ByteString cksum
-                 -> FileHeader cksum (Format (Parser ByteString) Maybe ByteString)
+fileHeaderRecord :: Format Parser Maybe ByteString cksum
+                 -> FileHeader cksum (Format Parser Maybe ByteString)
 fileHeaderRecord checksumFormat = FileHeader{
    fileName = zeroDelimitedUtf8 100,
    fileMode = zeroDelimitedOctal 8,
@@ -107,7 +108,7 @@ fileHeaderRecord checksumFormat = FileHeader{
    linked = zeroDelimitedUtf8 100,
    ustar = optional ((value (zeroDelimitedUtf8 8) "ustar  " <|> value (zeroDelimitedUtf8 8) "ustar00") *> ustarHeader)}
 
-ustarHeader :: Format (Parser ByteString) Maybe ByteString (UStarHeader Identity)
+ustarHeader :: Format Parser Maybe ByteString (UStarHeader Identity)
 ustarHeader = record UStarHeader{
    ownerName = zeroDelimitedUtf8 32,
    groupName = zeroDelimitedUtf8 32,
@@ -115,16 +116,16 @@ ustarHeader = record UStarHeader{
    deviceMinor = optionWithDefault (literal $ ByteString.replicate 8 0) (zeroDelimitedOctal 8),
    namePrefix = zeroDelimitedUtf8 167 {- 155+12 to pad to 512 -}}
 
-zeroDelimitedUtf8 :: Int -> Format (Parser ByteString) Maybe ByteString Text
+zeroDelimitedUtf8 :: Int -> Format Parser Maybe ByteString Text
 zeroDelimitedUtf8 width = mapValue decodeUtf8 encodeUtf8 $
                           ByteString.replicate width 0 `padded1` (takeWhile (/= ByteString.singleton 0))
 
-zeroDelimitedOctal :: Int -> Format (Parser ByteString) Maybe ByteString Word32
+zeroDelimitedOctal :: Int -> Format Parser Maybe ByteString Word32
 zeroDelimitedOctal width = mapValue (fst . head . readOct . ASCII.unpack)
                                     (padLeft '0' (width - 1) . ASCII.pack . flip showOct "") $
                            ByteString.replicate width 0 `padded1` (takeCharsWhile1 isOctDigit)
 
-zeroDelimitedOctal64 :: Format (Parser ByteString) Maybe ByteString Word64
+zeroDelimitedOctal64 :: Format Parser Maybe ByteString Word64
 zeroDelimitedOctal64 = mapValue (fst . head . readOct . ASCII.unpack)
                                 (padLeft '0' 11 . ASCII.pack . flip showOct "") $
                        ByteString.replicate 12 0 `padded1` (takeCharsWhile1 isOctDigit)

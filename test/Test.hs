@@ -11,6 +11,7 @@ import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath.Posix (combine)
 import qualified Text.ParserCombinators.Incremental as Incremental
 import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
+import qualified Data.Attoparsec.ByteString as Atto
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertFailure, assertEqual, testCase)
 
@@ -20,6 +21,7 @@ import qualified TAR
 import qualified WMF
 
 data TestFormat = forall f. TestFormat (Format (Parser ByteString) Maybe ByteString (f Identity))
+                | forall f. AttoFormat (Format Atto.Parser Maybe ByteString (f Identity))
 
 main = exampleTree "" "test/examples" >>= defaultMain . testGroup "examples"
 
@@ -32,12 +34,18 @@ exampleTree ancestry path =
          else do blob <- ByteString.readFile fullPath
                  let format
                         | ".mbr" `isSuffixOf` path = TestFormat MBR.format
-                        | ".tar" `isSuffixOf` path = TestFormat TAR.archive
+                        | ".tar" `isSuffixOf` path = AttoFormat TAR.archive
                         | ".wmf" `isSuffixOf` path = TestFormat WMF.fileFormat
                      Just blob'
                         | TestFormat f <- format,
                           [(structure, remainder)] <- Incremental.completeResults (Incremental.feedEof $
                                                                                    Incremental.feed blob $ parse f) =
+                             (<> remainder) <$> serialize f structure
+                        | AttoFormat f <- format,
+                          Atto.Done remainder structure <- Atto.parse (parse f) blob =
+                             (<> remainder) <$> serialize f structure
+                        | AttoFormat f <- format, Atto.Partial i <- Atto.parse (parse f) blob,
+                          Atto.Done remainder structure <- i mempty =
                              (<> remainder) <$> serialize f structure
                  return . (:[]) . testCase path $ assertEqual "round-trip" (hex blob) (hex blob')
 

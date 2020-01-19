@@ -5,7 +5,6 @@
 
 module Construct.Classes where
 
-import Control.Monad.Fix (MonadFix)
 import qualified Rank2
 import qualified Text.ParserCombinators.Incremental as Incremental
 
@@ -171,10 +170,8 @@ class InputMappableParsing m where
                           (s -> Maybe s') -> (s' -> Maybe s) -> m s a -> m s' a
 
 -- | A subclass of 'MonadFix' for monads that can fix a function that handles higher-kinded data
-class MonadFix m => FixTraversable m where
+class Monad m => FixTraversable m where
    -- | This specialized form of 'Rank2.traverse' can be used inside 'mfix'.
-   --
-   -- > mfix (fixSequence . f) == fix (fixSequence . f =<<)
    fixSequence :: (Rank2.Traversable g, Applicative n) => g m -> m (g n)
    fixSequence = Rank2.traverse (pure <$>)
 
@@ -274,6 +271,8 @@ instance (TextualMonoid s, Cancellative.LeftReductive s, LookAheadParsing (Incre
    satisfyCharInput = Incremental.satisfyChar
    takeCharsWhile = Incremental.takeCharsWhile
    takeCharsWhile1 = Incremental.takeCharsWhile1
+
+instance FixTraversable Attoparsec.Parser
 
 instance Monoid s => FixTraversable (Incremental.Parser t s) where
    fixSequence = Incremental.record
