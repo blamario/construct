@@ -6,8 +6,8 @@ module Construct
   Format, parse, serialize,
 
   -- * Combinators
-  (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>), (<?>),
-  empty, optional, optionWithDefault, pair, deppair, many, some, count,
+  (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>), (<+>), (<?>),
+  empty, optional, optionWithDefault, pair, deppair, many, some, sepBy, count,
   -- ** Self-referential record support
   mfix, record,
   -- ** Mapping over a 'Format'
@@ -29,6 +29,7 @@ import Control.Applicative (Applicative, Alternative)
 import Control.Monad.Fix (MonadFix)
 import Data.Functor ((<$>), void)
 import qualified Data.Functor.Const as Functor
+import qualified Data.List as List
 import Data.List.NonEmpty (nonEmpty)
 import Data.Maybe (fromMaybe)
 import Data.Semigroup (Semigroup, (<>), sconcat)
@@ -353,6 +354,12 @@ f1 <|> f2 = Format{
    parse = parse f1 Applicative.<|> parse f2,
    serialize = \a-> serialize f1 a Applicative.<|> serialize f2 a}
 
+(<+>) :: Alternative m => Format m n s a -> Format m n s b -> Format m n s (Either a b)
+-- | A discriminated or tagged choice between two formats.
+f1 <+> f2 = Format{
+   parse = Left <$> parse f1 Applicative.<|> Right <$> parse f2,
+   serialize = either (serialize f1) (serialize f2)}
+
 optional :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s (Maybe a)
 -- | Same as the usual 'Applicative.optional' except a 'Format' is no 'Functor', let alone 'Alternative'.
 optional f = Format{
@@ -379,6 +386,16 @@ some :: (Alternative m, AlternativeFail n, Semigroup (n s)) => Format m n s a ->
 some f = Format{
    parse = Applicative.some (parse f),
    serialize = maybe (failure "[]") sconcat . nonEmpty . map (serialize f)}
+
+sepBy :: (Alternative m, Applicative n, Monoid s) => Format m n s a -> Format m n s () -> Format m n s [a]
+-- | Represents any number of values formatted using the first argument, separated by the second format argumewnt in
+-- serialized form. Similar to the usual 'Parser.sepBy' combinator.
+--
+-- >>> testParse (takeCharsWhile isLetter `sepBy` literal ",") "foo,bar,baz"
+-- Right [([],"foo,bar,baz"),(["foo"],",bar,baz"),(["foo","bar"],",baz"),(["foo","bar","baz"],"")]
+sepBy format separator = Format{
+   parse = Parser.sepBy (parse format) (parse separator),
+   serialize = \xs-> mconcat <$> sequenceA (List.intersperse (serialize separator ()) $ serialize format <$> xs)}
 
 pair :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
 -- | Combines two formats into a format for the pair of their values.
