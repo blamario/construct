@@ -69,7 +69,8 @@ and to parse the serialized binary form back into the record structure:
 -- [(BitMap {width = Identity 3, height = Identity 2, pixels = Identity [[7,8,9],[11,12,13]]},"")]
 ~~~
 
-Examples of more complex and realistic formats can be found in the `test/examples` directory.
+Examples of more complex and realistic formats can be found in the
+[`test`](https://github.com/blamario/construct/tree/master/test) directory.
 
 Acknowledgements
 ----------------
@@ -84,7 +85,7 @@ just in time to avoid following some bad ideas.
 Implementation notes
 --------------------
 
-I had to overcome two problems while implementing the present library. The first difficulty, mentioned in the
+I had to overcome two problems in the course of the implementation. The first difficulty, already touched on in the
 aforementioned blog post, is how to convert a record of formats into a format of the record. As the author of
 [rank2classes](https://hackage.haskell.org/package/rank2classes), I went for an obvious solution: parameterize the
 record as seen in the example, make it an instance of the
@@ -101,8 +102,9 @@ the computation* is known as the
 [`MonadFix`](https://hackage.haskell.org/package/base-4.12.0.0/docs/Control-Monad-Fix.html#t:MonadFix) class, though
 perhaps not as widely as it deserves. You won't find any parsers in the list of its instances, though, and for a good
 reason - it's quite impossible for a parser to obtain a value that it hasn't parsed yet. All *we* need, luckily, is
-access a partially parsed value. A limited `MonadFix` instance can do that, provided that we also use a specialized
-form of `Rank2.traverse` capable of preserving the record structure while it's being parsed.
+access an already parsed part of a partially parsed structure. A limited `MonadFix` instance can do that, provided
+that we also use a specialized form of `Rank2.traverse` capable of preserving the record structure while it's being
+parsed.
 
 As it happens, I have an old parser library named
 [incremental-parser](https://hackage.haskell.org/package/incremental-parser) on Hackage, and the name seems quite
