@@ -1,7 +1,0 @@
-resolver: lts-14.20
-packages:
-- .
-extra-deps:
-- monoid-subclasses-1.0
-- github: blamario/incremental-parser
-  commit: 13027e49ad59b0009a12bf3e693348a45916c918
