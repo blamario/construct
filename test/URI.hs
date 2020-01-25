@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, OverloadedStrings, ScopedTypeVariables, StandaloneDeriving,
+{-# LANGUAGE FlexibleInstances, LambdaCase, OverloadedStrings, ScopedTypeVariables, StandaloneDeriving,
              TemplateHaskell, TupleSections, TypeApplications #-}
 
 module URI where
@@ -7,7 +7,7 @@ import Data.Bits ((.|.), (.&.), shift)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ASCII
-import Data.Char (isAlpha, isAscii, isDigit, isHexDigit, chr, ord)
+import Data.Char (isAlpha, isAscii, isDigit, isHexDigit, chr, ord, toUpper)
 import Data.Foldable (fold)
 import Data.Functor.Identity (Identity, runIdentity)
 import qualified Data.List as List
@@ -42,37 +42,45 @@ data Authority t f = Authority{
    port :: f (Maybe Word16)
    }
 
-data HostName t = IPv4address{getIPv4address :: [Word8]}
-                | IPv6address{getIPv6address :: [Word16]}
-                | IPvFuture {version :: Word,
-                             address :: t}
-                | RegisteredName{getRegisteredName :: t}
+data HostName t = IPv4address [Word8]
+                | IPv6address [Word16]
+                | IPvFuture Word t
+                | RegisteredName t
+                deriving (Eq, Read, Show)
+
+deriving instance Show t => Show (UriReference t Identity)
+deriving instance Show t => Show (Authority t Identity)
 
 uriReference :: (Show t, TextualMonoid t) => Format (Parser t) Maybe t (UriReference t Identity)
 uriReference = record UriReference{
-   scheme = optional (mapValue (uncurry (<>)) (Factorial.splitAt 1) $
-                      pair (satisfy (any alpha . Textual.characterPrefix) $ take 1)
-                           (takeCharsWhile schemeChar)
-                      <* literal ":"),
-   authority = optional $ record Authority{
-        user = optional (takeCharsWhile userChar <* literal "@"),
-        host = hostName,
-        port = optional (mapValue fromIntegral fromIntegral $ satisfy (< 65536) $
-                         literal ":" *> mapDec (takeCharsWhile1 digit))},  -- port = *DIGIT in spec?
+   scheme = optional (uriScheme <* literal ":"),
+   authority = optional (literal "//" *> uriAuthority),
    path = encodedCharSequence pathChar `sepBy` literal "/",
-   query = optional (literal "*" *> encodedCharSequence queryChar),
+   query = optional (literal "?" *> encodedCharSequence queryChar),
    fragment = optional (literal "#" *> encodedCharSequence fragmentChar)
    }
 
+uriAuthority :: (Show t, TextualMonoid t) => Format (Parser t) Maybe t (Authority t Identity)
+uriAuthority = record Authority{
+        user = optional (takeCharsWhile userChar <* literal "@"),
+        host = hostName,
+        port = optional (mapValue fromIntegral fromIntegral $
+                         satisfy (< 65536) $ literal ":" *> mapDec (takeCharsWhile1 digit))}  -- port = *DIGIT in spec?
+
+uriScheme :: (Show t, TextualMonoid t) => Format (Parser t) Maybe t t
+uriScheme = mapValue (uncurry (<>)) (Factorial.splitAt 1) $
+            pair (satisfy (any alpha . Textual.characterPrefix) $ take 1) (takeCharsWhile schemeChar)
+                      
 hostName :: (Show t, TextualMonoid t) => Format (Parser t) Maybe t (HostName t)
-hostName = mapValue IPv4address getIPv4address ipV4address
+hostName = mapMaybeValue (Just . IPv4address) (\case (IPv4address a)-> Just a; _ -> Nothing) ipV4address
            <|> literal "["
-               *> (mapValue IPv6address getIPv6address ipV6address
-                    <|> mapValue (uncurry IPvFuture) (\ipf-> (version ipf, address ipf))
-                                 (pair (literal "v" *> mapHex (takeCharsWhile1 hexDigit))
-                                       (literal "." *> takeCharsWhile1 ipFutureChar)))
+               *> (mapMaybeValue (Just . IPv6address) (\case (IPv6address a)-> Just a; _ -> Nothing) ipV6address
+                    <|> mapMaybeValue (Just . uncurry IPvFuture) (\case (IPvFuture v a)-> Just (v, a); _ -> Nothing)
+                                      (pair (literal "v" *> mapHex (takeCharsWhile1 hexDigit))
+                                            (literal "." *> takeCharsWhile1 ipFutureChar)))
                <* literal "]"
-           <|> mapValue RegisteredName getRegisteredName (encodedCharSequence hostChar)
+           <|> mapMaybeValue (Just . RegisteredName) (\case (RegisteredName a)-> Just a; _ -> Nothing)
+                             (encodedCharSequence hostChar)
 
 ipV4address :: forall t. (Show t, TextualMonoid t) => Format (Parser t) Maybe t [Word8]
 ipV4address = satisfy ((== 4) . length) (decOctet `sepBy` literal ".")
@@ -85,7 +93,7 @@ ipV6address = satisfy ((== 8) . length) $
               mapValue fill shorten ipV6addressShort
    where fill :: [Maybe Word16] -> [Word16]
          shorten :: [Word16] -> [Maybe Word16]
-         fill words = concatMap (maybe (replicate (8 - length words) 0) (:[])) words
+         fill words = concatMap (maybe (replicate (9 - length words) 0) (:[])) words
          shorten [] = []
          shorten (0:0:words) = Nothing : map Just (dropWhile (== 0) words)
          shorten (word:words) = Just word : shorten words
@@ -115,7 +123,7 @@ alpha, digit, hexDigit, schemeChar, hostChar, userChar, ipFutureChar,
 
 alpha c      = isAlpha c && isAscii c
 digit c      = isAlpha c && isDigit c
-hexDigit c   = isAlpha c && isHexDigit c
+hexDigit c   = isHexDigit c && isAscii c
 schemeChar c = (isAlpha c || isDigit c) && isAscii c || elem @[] c "+-."
 ipFutureChar = userChar
 hostChar c   = unreserved c || subDelim c
@@ -128,22 +136,18 @@ unreserved c = isAscii c && (isAlpha c || isDigit c || elem @[] c "-._~")
 
 encodedCharSequence :: forall t. (Show t, TextualMonoid t) => (Char -> Bool) -> Format (Parser t) Maybe t t
 encodedCharSequence predicate = mapValue concatSequence splitSequence $
-                                many (takeCharsWhile predicate <+> percentEncoded)
+                                many (takeCharsWhile1 predicate <+> percentEncoded)
    where concatSequence :: [Either t Char] -> t
          splitSequence :: t -> [Either t Char]
          percentEncoded :: Format (Parser t) Maybe t Char
          concatSequence = mconcat . map (either id Textual.singleton)
          splitSequence s = case Textual.splitCharacterPrefix s
-            of Just ('#', rest)
-                  | Just (hex1, rest1) <- Textual.splitCharacterPrefix rest,
-                    Just (hex2, rest2) <- Textual.splitCharacterPrefix rest1 ->
-                       Right (hexChar [hex1, hex2]) : splitSequence rest2
-                  | otherwise -> []
-               Just (c, _)
+            of Just (c, t)
                   | predicate c, (prefix, rest) <- Textual.span_ False predicate s -> Left prefix : splitSequence rest
+                  | otherwise -> Right c : splitSequence t
                _ -> []
-         percentEncoded = mapValue hexChar (padLeft . (`showHex` "") . ord) $
-                          literal "#" *> count 2 (satisfy hexDigit char)
+         percentEncoded = mapValue hexChar (padLeft . map toUpper . (`showHex` "") . ord) $
+                          literal "%" *> count 2 (satisfy hexDigit char)
          hexChar = chr . fst . head . readHex
          padLeft [c] = ['0', c]
          padLeft cs = cs

@@ -3,10 +3,11 @@
 module Main where
 
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Char8 as Char8
 import Data.ByteString (ByteString)
 import Data.Functor.Identity (Identity)
 import Data.List (isSuffixOf)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -55,16 +56,18 @@ exampleTree ancestry path =
                           [(structure, remainder)] <- Incremental.completeResults (Incremental.feedEof $
                                                                                    Incremental.feed blob $ parse f) =
                              (<> remainder) <$> serialize f structure
-                        | LineFormat f <- format = Just (encodeUtf8 $ mconcat $ mapMaybe (roundTrip f) textLines)
+                        | LineFormat f <- format = Just (encodeUtf8 $ mconcat
+                                                         $ map ((<> "\n") . fromMaybe "???" . roundTrip f) textLines)
                         | AttoFormat f <- format,
                           Atto.Done remainder structure <- Atto.parse (parse f) blob =
                              (<> remainder) <$> serialize f structure
                         | AttoFormat f <- format, Atto.Partial i <- Atto.parse (parse f) blob,
                           Atto.Done remainder structure <- i mempty =
                              (<> remainder) <$> serialize f structure
-                 return . (:[]) . testCase path $ assertEqual "round-trip" (hex blob) (hex blob')
+                 return . (:[]) . testCase path $ assertEqual "round-trip" (hex format blob) (hex format blob')
 
-hex :: ByteString -> String
-hex = ByteString.foldr (pad . flip showHex "") ""
+hex :: TestFormat -> ByteString -> String
+hex LineFormat{} = Char8.unpack
+hex _ = ByteString.foldr (pad . flip showHex "") ""
    where pad [x] s = ['0', x] ++ s
          pad [x, y] s = [x, y] ++ s

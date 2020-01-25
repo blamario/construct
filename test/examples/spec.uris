@@ -101,4 +101,4 @@ http:g
 http://a/b/c/g
 
 example://a/b/c/%7Bfoo%7D
-eXAMPLE://a/./b/../b/%63/%7bfoo%7d
+eXAMPLE://a/./b/../b/c/%7Bfoo%7D
