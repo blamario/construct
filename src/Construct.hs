@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, ScopedTypeVariables #-}
 
 module Construct
 (
@@ -9,7 +9,7 @@ module Construct
   (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>), (<+>), (<?>),
   empty, optional, optionWithDefault, pair, deppair, many, some, sepBy, count,
   -- ** Self-referential record support
-  mfix, record,
+  mfix, record, recordWith,
   -- ** Mapping over a 'Format'
   mapSerialized, mapMaybeSerialized, mapValue, mapMaybeValue,
   -- ** Constraining a 'Format'
@@ -29,9 +29,11 @@ import Control.Applicative (Applicative, Alternative)
 import Control.Monad.Fix (MonadFix)
 import Data.Functor ((<$>), void)
 import qualified Data.Functor.Const as Functor
+import qualified Data.Functor.Identity as Functor
 import qualified Data.List as List
 import Data.List.NonEmpty (nonEmpty)
 import Data.Maybe (fromMaybe)
+import Data.Monoid (Ap(Ap, getAp))
 import Data.Semigroup (Semigroup, (<>), sconcat)
 import Data.Word (Word8)
 import Data.ByteString (ByteString)
@@ -316,14 +318,21 @@ count n item = Format{
    serialize = \as-> if length as == n then mconcat <$> traverse (serialize item) as
                      else expectedName ("a list of length " ++ show n) (failure $ show as)}
 
-record :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Monoid (n s), Applicative o, Foldable o) =>
-          g (Format m n s) -> Format m n s (g o)
+record :: (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Applicative n, Monoid s) =>
+          g (Format m n s) -> Format m n s (g Functor.Identity)
 -- | Converts a record of field formats into a single format of the whole record.
-record formats = Format{
+record = recordWith Functor.runIdentity
+
+recordWith :: forall g m n o s. (Rank2.Apply g, Rank2.Traversable g, FixTraversable m, Applicative n, Monoid s,
+                                 Applicative o) =>
+              (forall a. o (n a) -> n a) -> g (Format m n s) -> Format m n s (g o)
+-- | Converts a record of field formats into a single format of the whole record, a generalized form of 'record'.
+recordWith collapse formats = Format{
    parse = Input.fixSequence (parse Rank2.<$> formats),
-   serialize = Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
+   serialize = getAp . Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
    }
-   where serializeField format xs = Functor.Const (foldMap (serialize format) xs)
+   where serializeField :: forall a. Format m n s a -> o a -> Functor.Const (Ap n s) a
+         serializeField format xs = Functor.Const (Ap $ collapse (serialize format <$> xs))
 
 infixl 3 <|>
 infixl 4 <$
@@ -336,17 +345,17 @@ a <$ f = Format{
    parse = a Applicative.<$ parse f,
    serialize = \b-> if a == b then serialize f () else expectedName (show a) (failure $ show b)}
 
-(*>) :: (Applicative m, Semigroup (n s)) => Format m n s () -> Format m n s a -> Format m n s a
+(*>) :: (Applicative m, Applicative n, Semigroup s) => Format m n s () -> Format m n s a -> Format m n s a
 -- | Same as the usual 'Applicative.*>' except a 'Format' is no 'Functor', let alone 'Applicative'.
 f1 *> f2 = Format{
    parse = parse f1 Applicative.*> parse f2,
-   serialize = \a-> serialize f1 () <> serialize f2 a}
+   serialize = \a-> Applicative.liftA2 (<>) (serialize f1 ()) (serialize f2 a)}
 
-(<*) :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s () -> Format m n s a
+(<*) :: (Applicative m, Applicative n, Semigroup s) => Format m n s a -> Format m n s () -> Format m n s a
 -- | Same as the usual 'Applicative.<*' except a 'Format' is no 'Functor', let alone 'Applicative'.
 f1 <* f2 = Format{
    parse = parse f1 Applicative.<* parse f2,
-   serialize = \a-> serialize f1 a <> serialize f2 ()}
+   serialize = \a-> Applicative.liftA2 (<>) (serialize f1 a) (serialize f2 ())}
 
 (<|>) :: (Alternative m, Alternative n) => Format m n s a -> Format m n s a -> Format m n s a
 -- | Same as the usual 'Applicative.<|>' except a 'Format' is no 'Functor', let alone 'Alternative'.
@@ -360,32 +369,31 @@ f1 <+> f2 = Format{
    parse = Left <$> parse f1 Applicative.<|> Right <$> parse f2,
    serialize = either (serialize f1) (serialize f2)}
 
-optional :: (Alternative m, Alternative n, Monoid (n s)) => Format m n s a -> Format m n s (Maybe a)
+optional :: (Alternative m, Alternative n, Monoid s) => Format m n s a -> Format m n s (Maybe a)
 -- | Same as the usual 'Applicative.optional' except a 'Format' is no 'Functor', let alone 'Alternative'.
 optional f = Format{
    parse = Applicative.optional (parse f),
-   serialize = maybe mempty (serialize f)}
+   serialize = maybe (pure mempty) (serialize f)}
 
 -- | Like 'optional' except with arbitrary default serialization for the @Nothing@ value.
 --
 -- > optional = optionWithDefault (literal mempty)
-optionWithDefault :: (Alternative m, Alternative n, Monoid (n s)) =>
-                     Format m n s () -> Format m n s a -> Format m n s (Maybe a)
+optionWithDefault :: (Alternative m, Alternative n) => Format m n s () -> Format m n s a -> Format m n s (Maybe a)
 optionWithDefault d f = Format{
    parse = Just <$> parse f Applicative.<|> Nothing Applicative.<$ parse d,
    serialize = maybe (serialize d ()) (serialize f)}
 
-many :: (Alternative m, Monoid (n s)) => Format m n s a -> Format m n s [a]
+many :: (Alternative m, Applicative n, Monoid s) => Format m n s a -> Format m n s [a]
 -- | Same as the usual 'Applicative.many' except a 'Format' is no 'Functor', let alone 'Alternative'.
 many f = Format{
    parse = Applicative.many (parse f),
-   serialize = foldMap (serialize f)}
+   serialize = fmap mconcat . traverse (serialize f)}
 
-some :: (Alternative m, AlternativeFail n, Semigroup (n s)) => Format m n s a -> Format m n s [a]
+some :: (Alternative m, AlternativeFail n, Semigroup s) => Format m n s a -> Format m n s [a]
 -- | Same as the usual 'Applicative.some' except a 'Format' is no 'Functor', let alone 'Alternative'.
 some f = Format{
    parse = Applicative.some (parse f),
-   serialize = maybe (failure "[]") sconcat . nonEmpty . map (serialize f)}
+   serialize = maybe (failure "[]") (fmap sconcat . traverse (serialize f)) . nonEmpty}
 
 sepBy :: (Alternative m, Applicative n, Monoid s) => Format m n s a -> Format m n s () -> Format m n s [a]
 -- | Represents any number of values formatted using the first argument, separated by the second format argumewnt in
@@ -397,16 +405,16 @@ sepBy format separator = Format{
    parse = Parser.sepBy (parse format) (parse separator),
    serialize = \xs-> mconcat <$> sequenceA (List.intersperse (serialize separator ()) $ serialize format <$> xs)}
 
-pair :: (Applicative m, Semigroup (n s)) => Format m n s a -> Format m n s b -> Format m n s (a, b)
+pair :: (Applicative m, Applicative n, Semigroup s) => Format m n s a -> Format m n s b -> Format m n s (a, b)
 -- | Combines two formats into a format for the pair of their values.
 --
 -- >>> testParse (pair char char) "abc"
 -- Right [(('a','b'),"c")]
 pair f g = Format{
    parse = (,) <$> parse f <*> parse g,
-   serialize = \(a, b)-> serialize f a <> serialize g b}
+   serialize = \(a, b)-> Applicative.liftA2 (<>) (serialize f a) (serialize g b)}
 
-deppair :: (Monad m, Semigroup (n s)) => Format m n s a -> (a -> Format m n s b) -> Format m n s (a, b)
+deppair :: (Monad m, Applicative n, Semigroup s) => Format m n s a -> (a -> Format m n s b) -> Format m n s (a, b)
 -- | Combines two formats, where the second format depends on the first value, into a format for the pair of their
 -- values.  Similar to '>>=' except 'Format' is no 'Functor' let alone 'Monad'.
 --
@@ -416,7 +424,7 @@ deppair :: (Monad m, Semigroup (n s)) => Format m n s a -> (a -> Format m n s b)
 -- Right [(('a','a'),"c")]
 deppair f g = Format{
    parse = parse f >>= \a-> parse (g a) >>= \b-> return (a, b),
-   serialize = \(a, b)-> serialize f a <> serialize (g a) b}
+   serialize = \(a, b)-> Applicative.liftA2 (<>) (serialize f a) (serialize (g a) b)}
 
 empty :: (Alternative m, Alternative n) => Format m n s a
 -- | Same as the usual 'Applicative.empty' except a 'Format' is no 'Functor', let alone 'Alternative'.

@@ -1,6 +1,6 @@
 cabal-version:       >=1.10
 name:                construct
-version:             0.1.1
+version:             0.2
 synopsis:            Haskell version of the Construct library for easy specification of file formats
 description:
    A Haskell version of the <https://construct.readthedocs.io/en/latest/intro.html Construct> library for Python. A
