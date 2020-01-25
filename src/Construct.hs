@@ -298,7 +298,7 @@ cereal' :: (Monad m, InputParsing m, ParserInput m ~ ByteString, Applicative n) 
 -- Right [(513,"\ETX")]
 cereal' get put = Format p (pure . runPut . put)
    where p = go (runGetPartial get mempty)
-            where go (Fail msg _) = fail msg
+            where go (Fail msg _) = Parser.unexpected msg
                   go (Done r _) = pure r
                   go (Partial cont) = Input.anyToken >>= go . cont
 
