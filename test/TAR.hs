@@ -18,6 +18,7 @@ import qualified Rank2.TH
 import Data.Attoparsec.ByteString (Parser)
 
 import Construct
+import OrphanInstances
 
 import Prelude hiding ((<$), (<*), (*>), take, takeWhile)
 
@@ -139,17 +140,6 @@ sumOf :: FileHeader () Identity -> Word32
 sumOf header = ByteString.foldl' add 0 (fold $ serialize blankFormat header)
    where add s b = s + fromIntegral b
          blankFormat = record (fileHeaderRecord $ literal $ ASCII.replicate 8 ' ')
-
-instance TextualMonoid ByteString where
-   fromText = encodeUtf8
-   singleton = ASCII.singleton
-   splitCharacterPrefix = ASCII.uncons
-   dropWhile _ = ASCII.dropWhile
-   dropWhile_ _ = ASCII.dropWhile
-   takeWhile _ = ASCII.takeWhile
-   takeWhile_ _ = ASCII.takeWhile
-   span _ = ASCII.span
-   span_ _ = ASCII.span
 
 $(Rank2.TH.deriveAll ''Archive)
 $(Rank2.TH.deriveAll ''File)

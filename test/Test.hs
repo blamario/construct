@@ -3,14 +3,13 @@
 module Main where
 
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Char8 as ASCII
 import Data.ByteString (ByteString)
 import Data.Functor.Identity (Identity)
 import Data.List (isSuffixOf)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Numeric (showHex)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath.Posix (combine)
@@ -26,8 +25,10 @@ import qualified TAR
 import qualified URI
 import qualified WMF
 
+import Debug.Trace
+
 data TestFormat = forall f. TestFormat (Format (Parser ByteString) Maybe ByteString (f Identity))
-                | forall f. LineFormat (Format (Parser Text) Maybe Text (f Identity))
+                | forall f. LineFormat (Format (Parser ByteString) Maybe ByteString (f Identity))
                 | forall f. AttoFormat (Format Atto.Parser Maybe ByteString (f Identity))
 
 main = exampleTree "" "test/examples" >>= defaultMain . testGroup "examples"
@@ -44,20 +45,20 @@ exampleTree ancestry path =
                         | ".tar"  `isSuffixOf` path = AttoFormat TAR.archive
                         | ".uris" `isSuffixOf` path = LineFormat URI.uriReference
                         | ".wmf"  `isSuffixOf` path = TestFormat WMF.fileFormat
-                     textLines = Text.lines (decodeUtf8 blob)
                      roundTrip f t
-                        | Text.null t = Just t
+                        | ByteString.null t = Just t
                         | [(structure, remainder)] <- Incremental.completeResults (Incremental.feedEof $
                                                                                    Incremental.feed t $ parse f),
-                          Text.null remainder = serialize f structure
+                          ByteString.null remainder = serialize f structure
                         | otherwise = Nothing
                      Just blob'
                         | TestFormat f <- format,
                           [(structure, remainder)] <- Incremental.completeResults (Incremental.feedEof $
                                                                                    Incremental.feed blob $ parse f) =
                              (<> remainder) <$> serialize f structure
-                        | LineFormat f <- format = Just (encodeUtf8 $ mconcat
-                                                         $ map ((<> "\n") . fromMaybe "???" . roundTrip f) textLines)
+                        | LineFormat f <- format = Just (mconcat
+                                                         $ map ((<> "\n") . fromMaybe "???" . roundTrip f)
+                                                         $ ASCII.lines blob)
                         | AttoFormat f <- format,
                           Atto.Done remainder structure <- Atto.parse (parse f) blob =
                              (<> remainder) <$> serialize f structure
@@ -67,7 +68,7 @@ exampleTree ancestry path =
                  return . (:[]) . testCase path $ assertEqual "round-trip" (hex format blob) (hex format blob')
 
 hex :: TestFormat -> ByteString -> String
-hex LineFormat{} = Char8.unpack
+hex LineFormat{} = ASCII.unpack
 hex _ = ByteString.foldr (pad . flip showHex "") ""
    where pad [x] s = ['0', x] ++ s
          pad [x, y] s = [x, y] ++ s
