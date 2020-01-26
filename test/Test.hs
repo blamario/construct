@@ -29,6 +29,7 @@ import Debug.Trace
 
 data TestFormat = forall f. TestFormat (Format (Parser ByteString) Maybe ByteString (f Identity))
                 | forall f. LineFormat (Format (Parser ByteString) Maybe ByteString (f Identity))
+                | forall f. AttoLineFormat (Format Atto.Parser Maybe ByteString (f Identity))
                 | forall f. AttoFormat (Format Atto.Parser Maybe ByteString (f Identity))
 
 main = exampleTree "" "test/examples" >>= defaultMain . testGroup "examples"
@@ -43,13 +44,20 @@ exampleTree ancestry path =
                  let format
                         | ".mbr"  `isSuffixOf` path = TestFormat MBR.format
                         | ".tar"  `isSuffixOf` path = AttoFormat TAR.archive
-                        | ".uris" `isSuffixOf` path = LineFormat URI.uriReference
+                        | ".uris" `isSuffixOf` path = AttoLineFormat URI.uriReference
                         | ".wmf"  `isSuffixOf` path = TestFormat WMF.fileFormat
                      roundTrip f t
                         | ByteString.null t = Just t
                         | [(structure, remainder)] <- Incremental.completeResults (Incremental.feedEof $
                                                                                    Incremental.feed t $ parse f),
                           ByteString.null remainder = serialize f structure
+                        | otherwise = Nothing
+                     attoRoundTrip f t
+                        | ByteString.null t = Just t
+                        | Atto.Done remainder structure <- Atto.parse (parse f) t, ByteString.null remainder =
+                             serialize f structure
+                        | Atto.Partial i <- Atto.parse (parse f) t,
+                          Atto.Done remainder structure <- i mempty, ByteString.null remainder = serialize f structure
                         | otherwise = Nothing
                      Just blob'
                         | TestFormat f <- format,
@@ -59,6 +67,9 @@ exampleTree ancestry path =
                         | LineFormat f <- format = Just (mconcat
                                                          $ map ((<> "\n") . fromMaybe "???" . roundTrip f)
                                                          $ ASCII.lines blob)
+                        | AttoLineFormat f <- format = Just (mconcat
+                                                             $ map ((<> "\n") . fromMaybe "???" . attoRoundTrip f)
+                                                             $ ASCII.lines blob)
                         | AttoFormat f <- format,
                           Atto.Done remainder structure <- Atto.parse (parse f) blob =
                              (<> remainder) <$> serialize f structure
@@ -69,6 +80,7 @@ exampleTree ancestry path =
 
 hex :: TestFormat -> ByteString -> String
 hex LineFormat{} = ASCII.unpack
+hex AttoLineFormat{} = ASCII.unpack
 hex _ = ByteString.foldr (pad . flip showHex "") ""
    where pad [x] s = ['0', x] ++ s
          pad [x, y] s = [x, y] ++ s

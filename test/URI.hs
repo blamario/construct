@@ -7,7 +7,7 @@ import Data.Bits ((.|.), (.&.), shift)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as ASCII
-import Data.Char (isAlpha, isAscii, isDigit, isHexDigit, chr, ord, toUpper)
+import Data.Char (isAlpha, isAlphaNum, isDigit, isHexDigit, chr, ord, toUpper)
 import Data.Foldable (fold)
 import Data.Functor.Identity (Identity, runIdentity)
 import qualified Data.List as List
@@ -22,7 +22,7 @@ import Data.Word
 import Numeric (readHex, showHex)
 import Numeric.Natural (Natural)
 import qualified Rank2.TH
-import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
+import Data.Attoparsec.ByteString (Parser)
 
 import Construct
 import OrphanInstances
@@ -52,7 +52,7 @@ data HostName t = IPv4address [Word8]
 deriving instance Show t => Show (UriReference t Identity)
 deriving instance Show t => Show (Authority t Identity)
 
-uriReference :: Format (Parser ByteString) Maybe ByteString (UriReference ByteString Identity)
+uriReference :: Format Parser Maybe ByteString (UriReference ByteString Identity)
 uriReference = record UriReference{
    scheme = optional (uriScheme <* literal ":"),
    authority = optional (literal "//" *> uriAuthority),
@@ -61,18 +61,18 @@ uriReference = record UriReference{
    fragment = optional (literal "#" *> encodedCharSequence fragmentChar)
    }
 
-uriAuthority :: Format (Parser ByteString) Maybe ByteString (Authority ByteString Identity)
+uriAuthority :: Format Parser Maybe ByteString (Authority ByteString Identity)
 uriAuthority = record Authority{
         user = optional (takeCharsWhile userChar <* literal "@"),
         host = hostName,
         port = optional (mapValue fromIntegral fromIntegral $
-                         satisfy (< 65536) $ literal ":" *> mapDec (takeCharsWhile1 digit))}  -- port = *DIGIT in spec?
+                         satisfy (< 65536) $ literal ":" *> mapDec (takeCharsWhile1 isDigit))}  -- port = *DIGIT in spec?
 
-uriScheme :: Format (Parser ByteString) Maybe ByteString ByteString
+uriScheme :: Format Parser Maybe ByteString ByteString
 uriScheme = mapValue (uncurry (<>)) (Factorial.splitAt 1) $
-            pair (satisfy (any alpha . Textual.characterPrefix) $ take 1) (takeCharsWhile schemeChar)
+            pair (satisfy (any isAlpha . Textual.characterPrefix) $ take 1) (takeCharsWhile schemeChar)
                       
-hostName :: Format (Parser ByteString) Maybe ByteString (HostName ByteString)
+hostName :: Format Parser Maybe ByteString (HostName ByteString)
 hostName = mapMaybeValue (Just . IPv4address) (\case (IPv4address a)-> Just a; _ -> Nothing) ipV4address
            <|> literal "["
                *> (mapMaybeValue (Just . IPv6address) (\case (IPv6address a)-> Just a; _ -> Nothing) ipV6address
@@ -83,13 +83,13 @@ hostName = mapMaybeValue (Just . IPv4address) (\case (IPv4address a)-> Just a; _
            <|> mapMaybeValue (Just . RegisteredName) (\case (RegisteredName a)-> Just a; _ -> Nothing)
                              (encodedCharSequence hostChar)
 
-ipV4address :: Format (Parser ByteString) Maybe ByteString [Word8]
+ipV4address :: Format Parser Maybe ByteString [Word8]
 ipV4address = satisfy ((== 4) . length) (decOctet `sepBy` literal ".")
    where decOctet = mapValue fromIntegral fromIntegral $
                     satisfy (< 256) $ mapDec $
-                    takeCharsWhile1 digit
+                    takeCharsWhile1 isDigit
 
-ipV6address :: Format (Parser ByteString) Maybe ByteString [Word16]
+ipV6address :: Format Parser Maybe ByteString [Word16]
 ipV6address = satisfy ((== 8) . length) $
               mapValue fill shorten ipV6addressShort
    where fill :: [Maybe Word16] -> [Word16]
@@ -99,7 +99,7 @@ ipV6address = satisfy ((== 8) . length) $
          shorten (0:0:words) = Nothing : map Just (dropWhile (== 0) words)
          shorten (word:words) = Just word : shorten words
 
-ipV6addressShort :: Format (Parser ByteString) Maybe ByteString [Maybe Word16]
+ipV6addressShort :: Format Parser Maybe ByteString [Maybe Word16]
 ipV6addressShort = satisfy zeroOrOneNothings $
                    mapValue (uncurry (++)) (, []) $
                    pair (optional h16 `sepBy` literal ":")
@@ -115,18 +115,16 @@ ipV6addressShort = satisfy zeroOrOneNothings $
          h16 = mapHex $ satisfy ((<5) . Factorial.length) $ takeCharsWhile1 hexDigit
 
 mapHex :: (Integral n, Show n) =>
-          Format (Parser ByteString) Maybe ByteString ByteString -> Format (Parser ByteString) Maybe ByteString n
-mapDec :: Format (Parser ByteString) Maybe ByteString ByteString -> Format (Parser ByteString) Maybe ByteString Natural
+          Format Parser Maybe ByteString ByteString -> Format Parser Maybe ByteString n
+mapDec :: Format Parser Maybe ByteString ByteString -> Format Parser Maybe ByteString Natural
 mapDec = mapValue (read . Textual.toString (error . show)) (fromString . show)
 mapHex = mapValue (fst . head . readHex . Textual.toString (error . show)) (fromString . flip showHex "")
 
-alpha, digit, hexDigit, schemeChar, hostChar, userChar, ipFutureChar,
+hexDigit, schemeChar, hostChar, userChar, ipFutureChar,
    pathChar, queryChar, fragmentChar, unreserved, subDelim :: Char -> Bool
 
-alpha c      = isAlpha c && isAscii c
-digit c      = isAlpha c && isDigit c
-hexDigit c   = isHexDigit c && isAscii c
-schemeChar c = (isAlpha c || isDigit c) && isAscii c || elem @[] c "+-."
+hexDigit c   = isHexDigit c
+schemeChar c = isAlphaNum c || elem @[] c "+-."
 ipFutureChar = userChar
 hostChar c   = unreserved c || subDelim c
 userChar c   = unreserved c || subDelim c || c == ':'
@@ -134,14 +132,14 @@ pathChar c   = unreserved c || subDelim c || c == ':' || c == '@'
 queryChar c  = pathChar c || c == '/' || c == '?'
 fragmentChar = queryChar
 subDelim c   = elem @[] c "!$&'()*+,;="
-unreserved c = isAscii c && (isAlpha c || isDigit c || elem @[] c "-._~")
+unreserved c = isAlphaNum c || elem @[] c "-._~"
 
-encodedCharSequence :: (Char -> Bool) -> Format (Parser ByteString) Maybe ByteString ByteString
+encodedCharSequence :: (Char -> Bool) -> Format Parser Maybe ByteString ByteString
 encodedCharSequence predicate = mapValue concatSequence splitSequence $
                                 many (takeCharsWhile1 predicate <+> percentEncoded)
    where concatSequence :: [Either ByteString Char] -> ByteString
          splitSequence :: ByteString -> [Either ByteString Char]
-         percentEncoded :: Format (Parser ByteString) Maybe ByteString Char
+         percentEncoded :: Format Parser Maybe ByteString Char
          concatSequence = mconcat . map (either id Textual.singleton)
          splitSequence s = case Textual.splitCharacterPrefix s
             of Just (c, t)
