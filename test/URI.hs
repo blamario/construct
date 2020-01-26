@@ -22,7 +22,7 @@ import Data.Word
 import Numeric (readHex, showHex)
 import Numeric.Natural (Natural)
 import qualified Rank2.TH
-import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser)
+import Text.ParserCombinators.Incremental.LeftBiasedLocal (Parser, completeResults, feed, feedEof)
 
 import Construct
 import OrphanInstances
@@ -51,6 +51,8 @@ data HostName t = IPv4address [Word8]
 
 deriving instance Show t => Show (UriReference t Identity)
 deriving instance Show t => Show (Authority t Identity)
+
+main = print (completeResults $ feedEof $ feed "ftp://ftp.is.co.za/rfc/rfc1808.txt" $ parse uriReference)
 
 uriReference :: Format (Parser ByteString) Maybe ByteString (UriReference ByteString Identity)
 uriReference = record UriReference{
