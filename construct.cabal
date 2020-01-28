@@ -64,4 +64,6 @@ test-suite             examples
   main-is:             Test.hs
   other-modules:       MBR, TAR, URI, WMF, OrphanInstances
   default-language:    Haskell2010
+
+  -- workaround for https://gitlab.haskell.org/ghc/ghc/issues/17744
   ghc-options:         -O0
