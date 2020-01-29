@@ -42,7 +42,8 @@ format = literal (ASCII.pack "BMP") *> mfix (\this-> record
   BitMap{
         width= byte,
         height= byte,
-        pixels= count (fromIntegral $ height this) (count (fromIntegral $ width this) byte)
+        pixels= count (fromIntegral $ height this) $
+                count (fromIntegral $ width this) byte
         })
 ~~~
 
@@ -58,14 +59,18 @@ in-memory and the serialized form of the bitmap. A bijection, to be precise. The
 serialize the in-memory record form into the binary form:
 
 ~~~ {.haskell}
--- | >>> serialize format BitMap{width= Identity 3, height= Identity 2, pixels= Identity [[7,8,9], [11,12,13]]}
+-- |
+-- >>> let record = BitMap{width= pure 3, height= pure 2, pixels= pure [[7,8,9], [11,12,13]]}
+-- >>> serialize format record
 -- Just "BMP\ETX\STX\a\b\t\v\f\r"
 ~~~
 
 and to parse the serialized binary form back into the record structure:
 
 ~~~ {.haskell}
--- | >>> completeResults $ feedEof $ feed (ASCII.pack "BMP" <> ByteString.pack [3, 2, 7, 8, 9, 11, 12, 13]) $ parse format
+-- |
+-- >>> let bytes = ASCII.pack "BMP\ETX\STX\a\b\t\v\f\r"
+-- >>> completeResults $ feedEof $ feed bytes $ parse format
 -- [(BitMap {width = Identity 3, height = Identity 2, pixels = Identity [[7,8,9],[11,12,13]]},"")]
 ~~~
 
