@@ -1,5 +1,9 @@
 # Revision history for construct
 
+## 0.2.0.1 -- 2020-03-08
+
+* Incremented the upper bound for the `rank2classes` dependency
+
 ## 0.2 -- 2020-01-27
 
 * Updated for `base-4.13`
