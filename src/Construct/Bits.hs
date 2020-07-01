@@ -16,6 +16,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.List as List
 import Data.Word (Word8)
+import Text.Parser.Input (InputParsing (ParserInput, anyToken))
 
 import Construct
 import Construct.Classes

@@ -50,12 +50,14 @@ import qualified Text.ParserCombinators.Incremental as Incremental
 import Text.ParserCombinators.Incremental.Symmetric (Symmetric)
 import Data.Serialize (Serialize, Result(Done, Fail, Partial), Get, Putter, runGetPartial, runPut)
 import qualified Data.Serialize as Serialize
+import Text.Parser.Input (InputParsing (ParserInput), InputCharParsing)
+import qualified Text.Parser.Input as Input
 
 import qualified Rank2
 
-import qualified Construct.Classes as Input
-import Construct.Classes (AlternativeFail(failure), InputParsing (ParserInput), InputCharParsing, InputMappableParsing,
-                          FixTraversable, Error, errorString, expectedName)
+import Construct.Classes (AlternativeFail(failure), InputMappableParsing(mapParserInput, mapMaybeParserInput),
+                          FixTraversable(fixSequence), Error,
+                          errorString, expectedName)
 import Construct.Internal
 
 import Prelude hiding (pred, take, takeWhile)
@@ -234,7 +236,7 @@ mapSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
                   s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
                  (s -> t) -> (t -> s) -> Format (m s) n s a -> Format (m t) n t a
 mapSerialized f f' format = Format{
-   parse = Input.mapParserInput f f' (parse format),
+   parse = mapParserInput f f' (parse format),
    serialize = (f <$>) . serialize format}
 
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead. The argument
@@ -243,7 +245,7 @@ mapMaybeSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t
                        s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
                       (s -> Maybe t) -> (t -> Maybe s) -> Format (m s) n s a -> Format (m t) n t a
 mapMaybeSerialized f f' format = Format{
-   parse = Input.mapMaybeParserInput f f' (parse format),
+   parse = mapMaybeParserInput f f' (parse format),
    serialize = (fromMaybe (error "Partial serialization") . f <$>) . serialize format}
 
 -- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead.
@@ -328,7 +330,7 @@ recordWith :: forall g m n o s. (Rank2.Apply g, Rank2.Traversable g, FixTraversa
               (forall a. o (n a) -> n a) -> g (Format m n s) -> Format m n s (g o)
 -- | Converts a record of field formats into a single format of the whole record, a generalized form of 'record'.
 recordWith collapse formats = Format{
-   parse = Input.fixSequence (parse Rank2.<$> formats),
+   parse = fixSequence (parse Rank2.<$> formats),
    serialize = getAp . Rank2.foldMap Functor.getConst . Rank2.liftA2 serializeField formats
    }
    where serializeField :: forall a. Format m n s a -> o a -> Functor.Const (Ap n s) a
