@@ -1,5 +1,9 @@
 # Revision history for construct
 
+## 0.3 -- 2020-07-18
+
+* Import the Input[Char]Parser classes from the `input-parsers` package
+
 ## 0.2.0.1 -- 2020-03-08
 
 * Incremented the upper bound for the `rank2classes` dependency
