@@ -1,5 +1,9 @@
 # Revision history for construct
 
+## 0.3.0.1 -- 2021-03-07
+
+* Increment the dependencies' upper bounds
+
 ## 0.3 -- 2020-07-18
 
 * Import the Input[Char]Parser classes from the `input-parsers` package
