@@ -1,5 +1,9 @@
 # Revision history for construct
 
+## 0.3.0.2 -- 2021-03-22
+
+* Increment the attoparsec dependency upper bounds
+
 ## 0.3.0.1 -- 2021-03-07
 
 * Increment the dependencies' upper bounds
