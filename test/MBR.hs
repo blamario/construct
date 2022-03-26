@@ -53,6 +53,10 @@ deriving instance Show (MasterBootRecord Identity)
 deriving instance Show (Partition Identity)
 deriving instance Show (Position Identity)
 
+$(Rank2.TH.deriveAll ''MasterBootRecord)
+$(Rank2.TH.deriveAll ''Partition)
+$(Rank2.TH.deriveAll ''Position)
+
 format :: Format (Parser ByteString) Maybe ByteString (MasterBootRecord Identity)
 format = record MasterBootRecord{
    bootLoaderCode = count 446 byte,
@@ -85,7 +89,3 @@ position = littleEndianBytesOf $ record Position{
    head = littleEndianBitsOf byte,
    sector = count 6 bit,
    cylinder = count 10 bit}
-
-$(Rank2.TH.deriveAll ''MasterBootRecord)
-$(Rank2.TH.deriveAll ''Partition)
-$(Rank2.TH.deriveAll ''Position)

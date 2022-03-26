@@ -67,6 +67,11 @@ deriving instance Show (FileHeader () Identity)
 deriving instance Show (FileHeader Word32 Identity)
 deriving instance Show (UStarHeader Identity)
 
+$(Rank2.TH.deriveAll ''Archive)
+$(Rank2.TH.deriveAll ''File)
+$(Rank2.TH.deriveAll ''FileHeader)
+$(Rank2.TH.deriveAll ''UStarHeader)
+
 archive :: Format Parser Maybe ByteString (Archive Identity)
 archive = record Archive{files= many file}
 
@@ -140,8 +145,3 @@ sumOf :: FileHeader () Identity -> Word32
 sumOf header = ByteString.foldl' add 0 (fold $ serialize blankFormat header)
    where add s b = s + fromIntegral b
          blankFormat = record (fileHeaderRecord $ literal $ ASCII.replicate 8 ' ')
-
-$(Rank2.TH.deriveAll ''Archive)
-$(Rank2.TH.deriveAll ''File)
-$(Rank2.TH.deriveAll ''FileHeader)
-$(Rank2.TH.deriveAll ''UStarHeader)

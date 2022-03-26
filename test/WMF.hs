@@ -136,6 +136,10 @@ data Function = AbortDoc
               | TextOut
               deriving (Eq, Ord, Show)
 
+$(Rank2.TH.deriveAll ''File)
+$(Rank2.TH.deriveAll ''PlaceableHeader)
+$(Rank2.TH.deriveAll ''Record)
+
 fileFormat :: Format (Parser ByteString) Maybe ByteString (File Identity)
 fileFormat = record File{
    placeableHeader = optional headerFormat,
@@ -250,7 +254,3 @@ recordFormat = mfix $ \this-> record Record{
    params = count (fromIntegral (recordSize this) - 3) (cereal' getWord16le putWord16le)
    }
    where word16le = value (cereal' getWord16le putWord16le)
-
-$(Rank2.TH.deriveAll ''File)
-$(Rank2.TH.deriveAll ''PlaceableHeader)
-$(Rank2.TH.deriveAll ''Record)

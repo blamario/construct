@@ -52,6 +52,9 @@ data HostName t = IPv4address [Word8]
 deriving instance Show t => Show (UriReference t Identity)
 deriving instance Show t => Show (Authority t Identity)
 
+$(Rank2.TH.deriveAll ''UriReference)
+$(Rank2.TH.deriveAll ''Authority)
+
 uriReference :: Format Parser Maybe ByteString (UriReference ByteString Identity)
 uriReference = record UriReference{
    scheme = optional (uriScheme <* literal ":"),
@@ -151,6 +154,3 @@ encodedCharSequence predicate = mapValue concatSequence splitSequence $
          hexChar = chr . fst . head . readHex
          padLeft [c] = ['0', c]
          padLeft cs = cs
-
-$(Rank2.TH.deriveAll ''UriReference)
-$(Rank2.TH.deriveAll ''Authority)
