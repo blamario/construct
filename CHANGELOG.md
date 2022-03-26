@@ -1,5 +1,10 @@
 # Revision history for construct
 
+## 0.3.1 -- 2022-03-25
+
+* Increment the text dependency upper bound
+* Move the Template Haskell splices tso they compile with GHC 9
+
 ## 0.3.0.2 -- 2021-03-22
 
 * Increment the attoparsec dependency upper bounds
