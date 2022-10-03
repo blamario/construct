@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, TypeOperators #-}
 
 -- | This module exports the primitives and combinators for constructing formats with sub- or cross-byte
 -- components. See @test/MBR.hs@ for an example of its use.

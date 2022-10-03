@@ -1,5 +1,5 @@
 {-# LANGUAGE DefaultSignatures, FlexibleContexts, FlexibleInstances, TypeFamilies,
-             TypeSynonymInstances, UndecidableInstances #-}
+             TypeOperators, TypeSynonymInstances, UndecidableInstances #-}
 
 -- | The only good reason to import this module is if you intend to add another instance of the classes it exports.
 
