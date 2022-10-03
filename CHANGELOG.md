@@ -1,9 +1,13 @@
 # Revision history for construct
 
+## 0.3.1.1 -- 2022-10-03
+
+* Increment the `monoid-sublasses` and `input-parsers` dependencies' upper bounds
+
 ## 0.3.1 -- 2022-03-25
 
-* Increment the text dependency upper bound
-* Move the Template Haskell splices tso they compile with GHC 9
+* Increment the `text` dependency upper bound
+* Move the Template Haskell splices so they compile with GHC 9
 
 ## 0.3.0.2 -- 2021-03-22
 
