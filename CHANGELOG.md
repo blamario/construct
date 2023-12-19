@@ -1,5 +1,10 @@
 # Revision history for construct
 
+## 0.3.1.2 -- 2023-12-19
+
+* Fixed Cabal warnings
+* Increment the `bytestring`, `text`, `monoid-sublasses`, and `rank2classes` dependencies' upper bounds
+
 ## 0.3.1.1 -- 2022-10-03
 
 * Increment the `monoid-sublasses` and `input-parsers` dependencies' upper bounds
