@@ -7,7 +7,7 @@ module Construct
 
   -- * Combinators
   (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>), (<+>), (<?>),
-  empty, optional, optionWithDefault, pair, deppair, many, some, sepBy, count,
+  empty, optional, optionWithDefault, pair, deppair, many, some, manyTill, sepBy, count,
   -- ** Self-referential record support
   mfix, record, recordWith,
   -- ** Mapping over a 'Format'
@@ -396,6 +396,14 @@ some :: (Alternative m, AlternativeFail n, Semigroup s) => Format m n s a -> For
 some f = Format{
    parse = Applicative.some (parse f),
    serialize = maybe (failure "[]") (fmap sconcat . traverse (serialize f)) . nonEmpty}
+
+manyTill :: (Alternative m, Applicative n, Monoid s) => Format m n s a -> Format m n s () -> Format m n s [a]
+-- | In the parsing direction, the same as the regular 'Parser.manyTill': parses the item zero or more times until
+-- the terminator succeeds. When serializing, makes sure to append the terminator. Beware, for performance reasons
+-- the function does /not/ verify that no item's serialization can be parsed via the terminator.
+manyTill item end = Format{
+   parse = Parser.manyTill (parse item) (parse end),
+   serialize = \xs-> liftA2 ((<>) . mconcat) (traverse (serialize item) xs) (serialize end ())}
 
 sepBy :: (Alternative m, Applicative n, Monoid s) => Format m n s a -> Format m n s () -> Format m n s [a]
 -- | Represents any number of values formatted using the first argument, separated by the second format argumewnt in
