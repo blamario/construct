@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, ScopedTypeVariables, TypeOperators #-}
 
+-- | Declarative and symmetrical specification of binary and textual data formats.
+
 module Construct
 (
   -- * The type
