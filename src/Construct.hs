@@ -9,7 +9,7 @@ module Construct
 
   -- * Combinators
   (Construct.<$), (Construct.*>), (Construct.<*), (Construct.<|>), (<+>), (<?>),
-  empty, optional, optionWithDefault, pair, deppair, many, some, manyTill, sepBy, count,
+  empty, optional, optionWithDefault, pair, deppair, many, some, manyTill, sepBy, Construct.sequence, count,
   -- ** Self-referential record support
   mfix, record, recordWith,
   -- ** Mapping over a 'Format'
@@ -308,8 +308,17 @@ cereal' get put = Format p (pure . runPut . put)
                   go (Done r _) = pure r
                   go (Partial cont) = Input.anyToken >>= go . cont
 
+-- | Sequence a list of formats into a list format.
+sequence :: forall m n s a. (Monad m, AlternativeFail n, Monoid s, Eq a, Show a) => [Format m n s a] -> Format m n s [a]
+sequence fs = Format{
+  parse = traverse parse fs,
+  serialize = \xs-> if length fs == length xs then foldr (liftA2 (<>)) (pure mempty) $ zipWith serialize fs xs
+                    else failure $ "Expected list of length " <> shows (length fs) (", not " <> show (length xs))}
+
 count :: (Applicative m, AlternativeFail n, Show a, Monoid s) => Int -> Format m n s a -> Format m n s [a]
 -- | Repeats the argument format the given number of times.
+--
+-- The property @count n f == Construct.sequence (replicate n f)@ holds.
 --
 -- >>> testParse (count 4 byte) (ByteString.pack [1,2,3,4,5])
 -- Right [([1,2,3,4],"\ENQ")]
