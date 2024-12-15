@@ -1,5 +1,10 @@
 # Revision history for construct
 
+## 0.3.2 -- 2024-12-15
+
+* Added combinators `manyTill` and `sequence`
+* Slightly improved documentation
+
 ## 0.3.1.2 -- 2023-12-19
 
 * Fixed Cabal warnings
