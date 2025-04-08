@@ -13,7 +13,7 @@ module Construct
   -- ** Self-referential record support
   mfix, record, recordWith,
   -- ** Mapping over a 'Format'
-  mapSerialized, mapMaybeSerialized, mapValue, mapMaybeValue,
+  mapSerialized, mapMaybeSerialized, mapSerializedIncrementally, mapValue, mapMaybeValue,
   -- ** Constraining a 'Format'
   satisfy, value, padded, padded1,
 
@@ -57,7 +57,8 @@ import qualified Text.Parser.Input as Input
 
 import qualified Rank2
 
-import Construct.Classes (AlternativeFail(failure), InputMappableParsing(mapParserInput, mapMaybeParserInput),
+import Construct.Classes (AlternativeFail(failure),
+                          InputMappableParsing(mapParserInput, mapMaybeParserInput, mapMaybeParserInputPrefix),
                           FixTraversable(fixSequence), Error,
                           errorString, expectedName)
 import Construct.Internal
@@ -235,8 +236,8 @@ satisfy predicate f = Format{
 -- >>> testParse (mapSerialized ByteString.unpack ByteString.pack byte) [1,2,3]
 -- Right [(1,[2,3])]
 mapSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
-                  s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
-                 (s -> t) -> (t -> s) -> Format (m s) n s a -> Format (m t) n t a
+                  s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n)
+              => (s -> t) -> (t -> s) -> Format (m s) n s a -> Format (m t) n t a
 mapSerialized f f' format = Format{
    parse = mapParserInput f f' (parse format),
    serialize = (f <$>) . serialize format}
@@ -244,11 +245,24 @@ mapSerialized f f' format = Format{
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead. The argument
 -- functions may return @Nothing@ to indicate they have insuficient input to perform the conversion.
 mapMaybeSerialized :: (Monoid s, Monoid t, InputParsing (m s), InputParsing (m t),
-                       s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n) =>
-                      (s -> Maybe t) -> (t -> Maybe s) -> Format (m s) n s a -> Format (m t) n t a
+                       s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n)
+                   => (s -> Maybe t) -> (t -> Maybe s) -> Format (m s) n s a -> Format (m t) n t a
 mapMaybeSerialized f f' format = Format{
    parse = mapMaybeParserInput f f' (parse format),
    serialize = (fromMaybe (error "Partial serialization") . f <$>) . serialize format}
+
+-- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead. The argument
+-- functions may return @Nothing@ to indicate they have insuficient input to perform the conversion.
+mapSerializedIncrementally :: (Null.MonoidNull s, Monoid t, InputParsing (m s), InputParsing (m t),
+                               s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n)
+                           => (s -> Maybe (t, s)) -> (t -> Maybe (s, t)) -> Format (m s) n s a -> Format (m t) n t a
+mapSerializedIncrementally f f' format = Format{
+   parse = mapMaybeParserInputPrefix f f' (parse format),
+   serialize = (complete . f <$>) . serialize format}
+   where complete (Just (t, s))
+            | Null.null s = t
+            | otherwise = t <> complete (f s)
+         complete Nothing = error "Partial serialization"
 
 -- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead.
 --

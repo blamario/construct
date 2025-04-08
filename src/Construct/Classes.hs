@@ -10,6 +10,7 @@ import qualified Text.ParserCombinators.Incremental as Incremental
 
 import Control.Applicative (Alternative ((<|>), empty))
 import qualified Data.Attoparsec.ByteString as Attoparsec
+import Data.Monoid.Null (MonoidNull)
 import Text.Parser.Input (InputParsing (ParserInput))
 
 -- | Subclass of 'Alternative' that carries an error message in case of failure
@@ -31,11 +32,16 @@ class InputMappableParsing m where
    -- > f (s1 <> s2) == f s1 <> f s2
    mapParserInput :: (InputParsing (m s), s ~ ParserInput (m s), Monoid s, Monoid s') =>
                      (s -> s') -> (s' -> s) -> m s a -> m s' a
+
    -- | Converts a parser accepting one input stream type to another just like 'mapParserInput', except the argument
    -- functions can return @Nothing@ to indicate they need more input.
-   
    mapMaybeParserInput :: (InputParsing (m s), s ~ ParserInput (m s), Monoid s, Monoid s') =>
                           (s -> Maybe s') -> (s' -> Maybe s) -> m s a -> m s' a
+
+   -- | Converts a parser accepting one input stream type to another just like 'mapMaybeParserInput', except the
+   -- argument functions are allowed to convert an arbitrary prefix of the input
+   mapMaybeParserInputPrefix :: (InputParsing (m s), s ~ ParserInput (m s), MonoidNull s, Monoid s') =>
+                                (s -> Maybe (s', s)) -> (s' -> Maybe (s, s')) -> m s a -> m s' a
 
 -- | A subclass of 'MonadFix' for monads that can fix a function that handles higher-kinded data
 class Monad m => FixTraversable m where
@@ -91,4 +97,4 @@ instance Monoid s => FixTraversable (Incremental.Parser t s) where
 instance InputMappableParsing (Incremental.Parser t) where
    mapParserInput = Incremental.mapInput
    mapMaybeParserInput = Incremental.mapMaybeInput
-
+   mapMaybeParserInputPrefix = Incremental.mapMaybeInputPrefix
