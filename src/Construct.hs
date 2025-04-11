@@ -14,6 +14,7 @@ module Construct
   mfix, record, recordWith,
   -- ** Mapping over a 'Format'
   mapSerialized, mapMaybeSerialized, mapSerializedIncrementally, mapValue, mapMaybeValue,
+  serializedByteStringFromStrict, serializedByteStringToStrict,
   -- ** Constraining a 'Format'
   satisfy, value, padded, padded1,
 
@@ -40,6 +41,7 @@ import Data.Semigroup (Semigroup, (<>), sconcat)
 import Data.Word (Word8)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Monoid.Factorial as Factorial
 import qualified Data.Monoid.Textual as Textual
 import qualified Data.Monoid.Null as Null
@@ -263,6 +265,24 @@ mapSerializedIncrementally f f' format = Format{
             | Null.null s = t
             | otherwise = t <> complete (f s)
          complete Nothing = error "Partial serialization"
+
+-- | Converts a format for strict 'ByteString' into a format for lazy 'Lazy.ByteString'
+serializedByteStringFromStrict :: (InputParsing (m l), InputParsing (m s), l ~ ParserInput (m l), s ~ ParserInput (m s),
+                                   l ~ Lazy.ByteString, s ~ ByteString, InputMappableParsing m, Functor n)
+                               => Format (m s) n s a -> Format (m l) n l a
+serializedByteStringFromStrict = mapSerializedIncrementally lazyPrefix strictPrefix
+
+-- | Converts a format for lazy 'Lazy.ByteString' into a format for strict 'ByteString'
+serializedByteStringToStrict :: (InputParsing (m l), InputParsing (m s), l ~ ParserInput (m l), s ~ ParserInput (m s),
+                                 l ~ Lazy.ByteString, s ~ ByteString, InputMappableParsing m, Functor n)
+                             => Format (m l) n l a -> Format (m s) n s a
+serializedByteStringToStrict = mapSerializedIncrementally strictPrefix lazyPrefix
+
+strictPrefix :: Lazy.ByteString -> Maybe (ByteString, Lazy.ByteString)
+strictPrefix l = Lazy.foldrChunks (\s _-> (,) s <$> Lazy.stripPrefix (Lazy.fromStrict s) l) (Just mempty) l
+
+lazyPrefix :: ByteString -> Maybe (Lazy.ByteString, ByteString)
+lazyPrefix s = Just (Lazy.fromStrict s, mempty)
 
 -- | Converts a format for in-memory values of type @a@ so it works for values of type @b@ instead.
 --
