@@ -112,7 +112,7 @@ padded1 template format = Format{
                       else pure (s <> padding)
             where padding = Factorial.drop (Factorial.length s) template
          parsePadding s = if Null.null padding
-                          then Parser.unexpected (show s) Parser.<?> ("padded1 " ++ show template)
+                          then Parser.unexpected ("unpaddable " <> show s) Parser.<?> ("padded1 " ++ show template)
                           else s Applicative.<$ Input.string padding
             where padding = Factorial.drop (Factorial.length s) template
 
@@ -213,11 +213,11 @@ value :: (Eq a, Show a, Parser.Parsing m, Monad m, Alternative n) => Format m n 
 -- | A fixed expected value serialized through the argument format
 --
 -- >>> testParse (value char 'a') "bcd"
--- Left "encountered 'b'"
+-- Left "encountered different value 'b'"
 -- >>> testParse (value char 'a') "abc"
 -- Right [((),"bc")]
 value f v = Format{
-   parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected (show x)),
+   parse = void (parse f >>= \x-> if x == v then pure x else Parser.unexpected ("different value " <> show x)),
    serialize = \()-> serialize f v
    }
 
@@ -225,11 +225,11 @@ satisfy :: (Parser.Parsing m, Monad m, AlternativeFail n, Show a) => (a -> Bool)
 -- | Filter the argument format so it only succeeds for values that pass the predicate.
 --
 -- >>> testParse (satisfy isDigit char) "abc"
--- Left "encountered 'a'"
+-- Left "encountered unsatisfactory value 'a'"
 -- >>> testParse (satisfy isLetter char) "abc"
 -- Right [('a',"bc")]
 satisfy predicate f = Format{
-   parse = parse f >>= \v-> if predicate v then pure v else Parser.unexpected (show v),
+   parse = parse f >>= \v-> if predicate v then pure v else Parser.unexpected ("unsatisfactory value " <> show v),
    serialize = \v-> if predicate v then serialize f v else expectedName "satisfy" (failure $ show v)
    }
 
@@ -300,7 +300,7 @@ mapValue f f' format = Format{
 mapMaybeValue :: (Monad m, Parser.Parsing m, Show a, Show b, AlternativeFail n) =>
                  (a -> Maybe b) -> (b -> Maybe a) -> Format m n s a -> Format m n s b
 mapMaybeValue f f' format = Format{
-   parse = parse format >>= \v-> maybe (Parser.unexpected $ show v) pure (f v),
+   parse = parse format >>= \v-> maybe (Parser.unexpected $ "unmappable value " <> show v) pure (f v),
    serialize = \v-> maybe (expectedName "mapMaybeValue" (failure $ show v)) (serialize format) (f' v)}
 
 byte :: (InputParsing m, ParserInput m ~ ByteString, Applicative n) => Format m n ByteString Word8
@@ -474,7 +474,7 @@ deppair :: (Monad m, Applicative n, Semigroup s) => Format m n s a -> (a -> Form
 -- values.  Similar to '>>=' except 'Format' is no 'Functor' let alone 'Monad'.
 --
 -- >>> testParse (deppair char (\c-> satisfy (==c) char)) "abc"
--- Left "encountered 'b'"
+-- Left "encountered unsatisfactory value 'b'"
 -- >>> testParse (deppair char (\c-> satisfy (==c) char)) "aac"
 -- Right [(('a','a'),"c")]
 deppair f g = Format{
