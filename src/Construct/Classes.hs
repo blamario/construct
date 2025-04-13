@@ -40,7 +40,7 @@ class InputMappableParsing m where
 
    -- | Converts a parser accepting one input stream type to another just like 'mapMaybeParserInput', except the
    -- argument functions are allowed to convert an arbitrary prefix of the input
-   mapMaybeParserInputPrefix :: (InputParsing (m s), s ~ ParserInput (m s), MonoidNull s, Monoid s') =>
+   mapMaybeParserInputPrefix :: (InputParsing (m s), s ~ ParserInput (m s), MonoidNull s, MonoidNull s') =>
                                 (s -> Maybe (s', s)) -> (s' -> Maybe (s, s')) -> m s a -> m s' a
 
 -- | A subclass of 'MonadFix' for monads that can fix a function that handles higher-kinded data

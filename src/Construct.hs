@@ -255,7 +255,7 @@ mapMaybeSerialized f f' format = Format{
 
 -- | Converts a format for serialized streams of type @s@ so it works for streams of type @t@ instead. The argument
 -- functions may return @Nothing@ to indicate they have insuficient input to perform the conversion.
-mapSerializedIncrementally :: (Null.MonoidNull s, Monoid t, InputParsing (m s), InputParsing (m t),
+mapSerializedIncrementally :: (Null.MonoidNull s, Null.MonoidNull t, InputParsing (m s), InputParsing (m t),
                                s ~ ParserInput (m s), t ~ ParserInput (m t), InputMappableParsing m, Functor n)
                            => (s -> Maybe (t, s)) -> (t -> Maybe (s, t)) -> Format (m s) n s a -> Format (m t) n t a
 mapSerializedIncrementally f f' format = Format{
